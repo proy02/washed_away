@@ -781,6 +781,11 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
+<div style="position: fixed; top: 20px; left: 20px; width: 200px; height: 100px; background: red; color: white; z-index: 99999; font-size: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+  TEST DIV WORKS!
+</div>
+
+
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
     <g id="Layer_1" data-name="Layer 1">
