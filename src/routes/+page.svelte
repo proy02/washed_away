@@ -145,6 +145,8 @@
       screenCategory = 'desktop';
     }
     
+    console.log('📱 getResponsiveViewBox - step:', step, 'screenCategory:', screenCategory, 'windowWidth:', windowWidth);
+    
     // Get adjustments for this step and screen size
     const adjustments = views[step].adjustments?.[screenCategory] || { offsetX: 0, offsetY: 0, scale: 1.0 };
     
@@ -155,6 +157,7 @@
       const adjustedY = y + adjustments.offsetY;
       
       const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
+      console.log('🇮🇳 India step result:', result);
       return result;
     }
     
@@ -170,6 +173,8 @@
     } else {
       zoomFactor = 1.0;
     }
+    
+    console.log('🔍 zoomFactor:', zoomFactor, 'adjustments:', adjustments);
     
     // Apply custom scale to zoom factor
     const finalZoomFactor = zoomFactor * adjustments.scale;
@@ -188,6 +193,7 @@
     // Now adjust for aspect ratio
     const result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
     
+    console.log('🎯 Final viewBox result:', result);
     return result;
   }
   
@@ -224,63 +230,63 @@
   
   viewBoxStore.subscribe(value => {
     viewBoxString = value.map(v => v.toFixed(2)).join(' ');
+    console.log('📦 ViewBox updated to:', viewBoxString);
   });
   
   function updateViewBox(step, width, height) {
-    console.log('🎯 updateViewBox called with step:', step, 'width:', width, 'height:', height);
+    console.log('🎯 updateViewBox called - step:', step, 'width:', width, 'height:', height);
     
     // Use the original viewBox coordinates with responsive adjustments
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
-    
-    console.log('📦 originalViewBox:', originalViewBox);
-    console.log('📱 responsiveViewBox:', responsiveViewBox);
   
     viewBoxStore.set(responsiveViewBox);
-    console.log('✅ ViewBox updated for step', step);
+    console.log('✅ ViewBox store updated for step', step);
   }
   
-  // FIXED: Improved scroll handler to prevent mobile glitches
   function onScroll() {
     const scrollY = window.scrollY;
     const height = window.innerHeight;
+    // Add one extra viewport height so the last step is fully visible
     const totalScrollytellingHeight = (views.length + 1) * height;
     
-    // More robust check for scrollytelling active state
-    if (scrollY >= 0 && scrollY < totalScrollytellingHeight) {
-      // Always ensure we're in scrollytelling mode when in range
-      if (!isScrollytellingActive) {
-        isScrollytellingActive = true;
-      }
+    console.log('📜 SCROLL EVENT - scrollY:', scrollY, 'height:', height, 'totalHeight:', totalScrollytellingHeight);
+    console.log('📜 Current state - step:', currentStep, 'isActive:', isScrollytellingActive, 'showPanel:', showInfoPanel);
+    
+    // Check if we're still in the scrollytelling section
+    if (scrollY < totalScrollytellingHeight) {
+      console.log('🟢 Inside scrollytelling range');
       
-      // Calculate current step, ensuring it's within bounds
-      const rawStep = scrollY / height;
-      const step = Math.max(0, Math.min(views.length - 1, Math.floor(rawStep)));
+      isScrollytellingActive = true;
+      const step = Math.min(views.length - 1, Math.floor(scrollY / height));
+      
+      console.log('📊 Calculated step:', step, 'from scrollY/height:', scrollY/height);
   
-      // Only update if step actually changed
       if (step !== currentStep) {
+        console.log('🔄 Step changed from', currentStep, 'to', step);
         currentStep = step;
         updateViewBox(currentStep, window.innerWidth, window.innerHeight);
       }
       
-      // Show info panel for all steps except during the transition viewport
-      const lastStepThreshold = views.length * height;
+      // NEW: Hide info panel during the last viewport (the extra one for transition)
+      const lastStepThreshold = views.length * height; // Start of the extra viewport
       showInfoPanel = scrollY < lastStepThreshold;
       
-    } else {
-      // We've scrolled past the scrollytelling section OR scrolled above it
-      isScrollytellingActive = false;
-      showInfoPanel = false;
+      console.log('👁️ Info panel visibility:', showInfoPanel, 'threshold:', lastStepThreshold);
       
-      // ADDED: Reset to first step when scrolling back to top
-      if (scrollY < height && currentStep !== 0) {
-        currentStep = 0;
-        updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-      }
+    } else {
+      console.log('🔴 Outside scrollytelling range - deactivating');
+      // We've scrolled past the scrollytelling section
+      isScrollytellingActive = false;
+      showInfoPanel = false; // Also hide info panel
     }
+    
+    console.log('📜 SCROLL END - final state: step:', currentStep, 'isActive:', isScrollytellingActive, 'showPanel:', showInfoPanel);
+    console.log('---');
   }
   
   function onResize() {
+    console.log('📏 RESIZE EVENT - new dimensions:', window.innerWidth, 'x', window.innerHeight);
     updateViewBox(currentStep, window.innerWidth, window.innerHeight);
   }
   
@@ -347,28 +353,27 @@
   onMount(() => {
     if (!browser) return;
     
-    console.log('🚀 Component mounted on browser');
-    console.log('Initial innerWidth:', innerWidth, 'innerHeight:', innerHeight);
+    console.log('🚀 Component mounted in browser');
+    console.log('🚀 Initial dimensions:', window.innerWidth, 'x', window.innerHeight);
+    console.log('🚀 Initial currentStep:', currentStep);
     
     // Start monitoring the large image load
     monitorLargeImageLoad();
   
     setupProgressiveLoading();
     
-    // FIXED: Use passive event listeners for better mobile performance
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', onResize);
     
-    console.log('📡 Event listeners added');
+    console.log('📡 Event listeners attached');
   
     // Initial update
     updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-    console.log('🎬 Initial viewBox update completed');
     
     // Monitor when DOM is fully loaded
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
-        console.log('📄 DOM loaded');
+        console.log('📄 DOM Content Loaded');
       });
     } else {
       console.log('📄 DOM already loaded');
@@ -377,12 +382,12 @@
     // Monitor when all resources (images, SVGs) are loaded
     if (document.readyState === 'complete') {
       const loadTime = performance.now() - pageLoadStartTime;
-      console.log('🏁 All resources loaded, load time:', loadTime);
+      console.log('🏁 All resources loaded, time:', loadTime + 'ms');
       checkResourcePerformance();
     } else {
       window.addEventListener('load', () => {
         const loadTime = performance.now() - pageLoadStartTime;
-        console.log('🏁 Window load event, load time:', loadTime);
+        console.log('🏁 Window load event, time:', loadTime + 'ms');
         checkResourcePerformance();
       });
     }
@@ -396,7 +401,7 @@
   
   // Reactive statement to handle window size changes
   $: if (browser && innerWidth && innerHeight) {
-    console.log('🔄 Reactive update triggered - innerWidth:', innerWidth, 'innerHeight:', innerHeight);
+    console.log('🔄 Reactive update triggered - dimensions:', innerWidth, 'x', innerHeight);
     updateViewBox(currentStep, innerWidth, innerHeight);
   }
   
