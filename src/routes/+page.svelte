@@ -234,30 +234,43 @@
     viewBoxStore.set(responsiveViewBox);
   }
   
+  // FIXED: Improved scroll handler to prevent mobile glitches
   function onScroll() {
     const scrollY = window.scrollY;
     const height = window.innerHeight;
-    // Add one extra viewport height so the last step is fully visible
     const totalScrollytellingHeight = (views.length + 1) * height;
     
-    // Check if we're still in the scrollytelling section
-    if (scrollY < totalScrollytellingHeight) {
-      isScrollytellingActive = true;
-      const step = Math.min(views.length - 1, Math.floor(scrollY / height));
+    // More robust check for scrollytelling active state
+    if (scrollY >= 0 && scrollY < totalScrollytellingHeight) {
+      // Always ensure we're in scrollytelling mode when in range
+      if (!isScrollytellingActive) {
+        isScrollytellingActive = true;
+      }
+      
+      // Calculate current step, ensuring it's within bounds
+      const rawStep = scrollY / height;
+      const step = Math.max(0, Math.min(views.length - 1, Math.floor(rawStep)));
   
+      // Only update if step actually changed
       if (step !== currentStep) {
         currentStep = step;
         updateViewBox(currentStep, window.innerWidth, window.innerHeight);
       }
       
-      // NEW: Hide info panel during the last viewport (the extra one for transition)
-      const lastStepThreshold = views.length * height; // Start of the extra viewport
+      // Show info panel for all steps except during the transition viewport
+      const lastStepThreshold = views.length * height;
       showInfoPanel = scrollY < lastStepThreshold;
       
     } else {
-      // We've scrolled past the scrollytelling section
+      // We've scrolled past the scrollytelling section OR scrolled above it
       isScrollytellingActive = false;
-      showInfoPanel = false; // Also hide info panel
+      showInfoPanel = false;
+      
+      // ADDED: Reset to first step when scrolling back to top
+      if (scrollY < height && currentStep !== 0) {
+        currentStep = 0;
+        updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+      }
     }
   }
   
@@ -333,8 +346,9 @@
   
     setupProgressiveLoading();
     
-    window.addEventListener('scroll', onScroll);
-    window.addEventListener('resize', onResize);
+    // FIXED: Use passive event listeners for better mobile performance
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
   
     // Initial update
     updateViewBox(currentStep, window.innerWidth, window.innerHeight);
