@@ -127,6 +127,16 @@
   let isScrollytellingActive = true; // Track if scrollytelling is active
   let showInfoPanel = true; // NEW: Separate control for info panel visibility
   
+  // DEBUG: Visual debug info
+  let debugInfo = {
+    scrollY: 0,
+    step: 0,
+    isActive: true,
+    showPanel: true,
+    scrollDirection: 'none',
+    lastUpdate: new Date().toLocaleTimeString()
+  };
+  
   const DURATION = 1000;
   
   // ENHANCED: Helper function with custom adjustments per step and screen size
@@ -252,6 +262,21 @@
     // Add one extra viewport height so the last step is fully visible
     const totalScrollytellingHeight = (views.length + 1) * height;
     
+    // Determine scroll direction
+    const scrollDirection = scrollY > (window.lastScrollY || 0) ? 'down' : 'up';
+    
+    // Update debug info
+    debugInfo = {
+      scrollY: Math.round(scrollY),
+      step: Math.min(views.length - 1, Math.floor(scrollY / height)),
+      isActive: scrollY < totalScrollytellingHeight,
+      showPanel: scrollY < (views.length * height),
+      scrollDirection: scrollDirection,
+      lastUpdate: new Date().toLocaleTimeString(),
+      totalHeight: Math.round(totalScrollytellingHeight),
+      threshold: Math.round(views.length * height)
+    };
+    
     // 🐛 DEBUG: Log all scroll events, especially useful for mobile debugging
     console.log(`📱 DEBUG - onScroll:`, {
       scrollY,
@@ -262,7 +287,7 @@
       isScrollytellingActive: isScrollytellingActive,
       showInfoPanel: showInfoPanel,
       isMobile: window.innerWidth <= 768,
-      scrollDirection: scrollY > (window.lastScrollY || 0) ? 'down' : 'up'
+      scrollDirection: scrollDirection
     });
     
     // Store last scroll position for direction detection
@@ -584,6 +609,27 @@
     font-size: 16px;
     line-height: 1.6;
     color: #4a4a4a;
+  }
+
+  /* Debug Panel Styles */
+  .debug-panel {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 12px;
+    z-index: 9999;
+    line-height: 1.3;
+    min-width: 200px;
+    backdrop-filter: blur(10px);
+  }
+
+  .debug-panel div {
+    margin: 2px 0;
   }
 
   /* Text content section that appears after scrollytelling */
@@ -919,6 +965,21 @@
     </g>
   </svg>
 </div>
+
+<!-- Debug Panel - Visible on screen -->
+{#if debugInfo}
+<div class="debug-panel">
+  <div><strong>🐛 DEBUG</strong></div>
+  <div>ScrollY: {debugInfo.scrollY}</div>
+  <div>Step: {debugInfo.step} ({views[debugInfo.step]?.name})</div>
+  <div>Active: {debugInfo.isActive}</div>
+  <div>Panel: {debugInfo.showPanel}</div>
+  <div>Direction: {debugInfo.scrollDirection}</div>
+  <div>Total Height: {debugInfo.totalHeight}</div>
+  <div>Threshold: {debugInfo.threshold}</div>
+  <div style="font-size: 10px;">{debugInfo.lastUpdate}</div>
+</div>
+{/if}
 
 <!-- Scrollytelling sections - add one extra section for the last step to be fully visible -->
 {#each Array(views.length + 1) as _, i}
