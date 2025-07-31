@@ -227,11 +227,17 @@
   });
   
   function updateViewBox(step, width, height) {
+    console.log('🎯 updateViewBox called with step:', step, 'width:', width, 'height:', height);
+    
     // Use the original viewBox coordinates with responsive adjustments
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
+    
+    console.log('📦 originalViewBox:', originalViewBox);
+    console.log('📱 responsiveViewBox:', responsiveViewBox);
   
     viewBoxStore.set(responsiveViewBox);
+    console.log('✅ ViewBox updated for step', step);
   }
   
   // FIXED: Improved scroll handler to prevent mobile glitches
@@ -341,6 +347,9 @@
   onMount(() => {
     if (!browser) return;
     
+    console.log('🚀 Component mounted on browser');
+    console.log('Initial innerWidth:', innerWidth, 'innerHeight:', innerHeight);
+    
     // Start monitoring the large image load
     monitorLargeImageLoad();
   
@@ -349,29 +358,37 @@
     // FIXED: Use passive event listeners for better mobile performance
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
+    
+    console.log('📡 Event listeners added');
   
     // Initial update
     updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+    console.log('🎬 Initial viewBox update completed');
     
     // Monitor when DOM is fully loaded
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
-        // DOM loaded
+        console.log('📄 DOM loaded');
       });
+    } else {
+      console.log('📄 DOM already loaded');
     }
     
     // Monitor when all resources (images, SVGs) are loaded
     if (document.readyState === 'complete') {
       const loadTime = performance.now() - pageLoadStartTime;
+      console.log('🏁 All resources loaded, load time:', loadTime);
       checkResourcePerformance();
     } else {
       window.addEventListener('load', () => {
         const loadTime = performance.now() - pageLoadStartTime;
+        console.log('🏁 Window load event, load time:', loadTime);
         checkResourcePerformance();
       });
     }
     
     return () => {
+      console.log('🧹 Cleaning up event listeners');
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
     };
@@ -379,6 +396,7 @@
   
   // Reactive statement to handle window size changes
   $: if (browser && innerWidth && innerHeight) {
+    console.log('🔄 Reactive update triggered - innerWidth:', innerWidth, 'innerHeight:', innerHeight);
     updateViewBox(currentStep, innerWidth, innerHeight);
   }
   
