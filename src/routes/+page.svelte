@@ -967,12 +967,16 @@
 </div>
 
 <!-- Debug Panel - Visible on screen -->
-<div style="position: fixed; top: 50px; left: 50%; transform: translateX(-50%); background: red; color: white; padding: 20px; font-size: 16px; z-index: 99999; border: 3px solid yellow;">
+{#if browser}
+<div style="position: fixed; top: 50px; left: 50%; transform: translateX(-50%); background: red; color: white; padding: 20px; font-size: 16px; z-index: 99999; border: 3px solid yellow; font-family: monospace;">
   <div><strong>🐛 DEBUG TEST</strong></div>
-  <div>ScrollY: {Math.round(window?.scrollY || 0)}</div>
+  <div>ScrollY: {Math.round(typeof window !== 'undefined' ? window.scrollY : 0)}</div>
   <div>Active: {isScrollytellingActive}</div>
-  <div>Step: {currentStep}</div>
+  <div>Step: {currentStep} ({views[currentStep]?.name || 'Unknown'})</div>
+  <div>Show Panel: {showInfoPanel}</div>
+  <div>Browser: {browser}</div>
 </div>
+{/if}
 
 <!-- Scrollytelling sections - add one extra section for the last step to be fully visible -->
 {#each Array(views.length + 1) as _, i}
