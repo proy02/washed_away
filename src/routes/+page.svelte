@@ -967,19 +967,12 @@
 </div>
 
 <!-- Debug Panel - Visible on screen -->
-{#if debugInfo}
-<div class="debug-panel">
-  <div><strong>🐛 DEBUG</strong></div>
-  <div>ScrollY: {debugInfo.scrollY}</div>
-  <div>Step: {debugInfo.step} ({views[debugInfo.step]?.name})</div>
-  <div>Active: {debugInfo.isActive}</div>
-  <div>Panel: {debugInfo.showPanel}</div>
-  <div>Direction: {debugInfo.scrollDirection}</div>
-  <div>Total Height: {debugInfo.totalHeight}</div>
-  <div>Threshold: {debugInfo.threshold}</div>
-  <div style="font-size: 10px;">{debugInfo.lastUpdate}</div>
+<div style="position: fixed; top: 50px; left: 50%; transform: translateX(-50%); background: red; color: white; padding: 20px; font-size: 16px; z-index: 99999; border: 3px solid yellow;">
+  <div><strong>🐛 DEBUG TEST</strong></div>
+  <div>ScrollY: {Math.round(window?.scrollY || 0)}</div>
+  <div>Active: {isScrollytellingActive}</div>
+  <div>Step: {currentStep}</div>
 </div>
-{/if}
 
 <!-- Scrollytelling sections - add one extra section for the last step to be fully visible -->
 {#each Array(views.length + 1) as _, i}
