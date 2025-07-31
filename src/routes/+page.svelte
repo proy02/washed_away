@@ -11,6 +11,9 @@
   let highResImage;
   let isHighResLoaded = false;
   
+  // Force debug to always show, even in production
+  const FORCE_DEBUG = true;
+  
   function setupProgressiveLoading() {
     if (!browser || !highResImage) return;
     
@@ -127,16 +130,6 @@
   let isScrollytellingActive = true; // Track if scrollytelling is active
   let showInfoPanel = true; // NEW: Separate control for info panel visibility
   
-  // DEBUG: Visual debug info
-  let debugInfo = {
-    scrollY: 0,
-    step: 0,
-    isActive: true,
-    showPanel: true,
-    scrollDirection: 'none',
-    lastUpdate: new Date().toLocaleTimeString()
-  };
-  
   const DURATION = 1000;
   
   // ENHANCED: Helper function with custom adjustments per step and screen size
@@ -241,17 +234,19 @@
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
   
-    console.log(`📱 DEBUG - updateViewBox called:`, {
-      step,
-      stepName: views[step].name,
-      width,
-      height,
-      originalViewBox,
-      responsiveViewBox,
-      currentStep,
-      isScrollytellingActive,
-      showInfoPanel
-    });
+    if (FORCE_DEBUG || browser) {
+      console.log(`📱 DEBUG - updateViewBox called:`, {
+        step,
+        stepName: views[step].name,
+        width,
+        height,
+        originalViewBox,
+        responsiveViewBox,
+        currentStep,
+        isScrollytellingActive,
+        showInfoPanel
+      });
+    }
   
     viewBoxStore.set(responsiveViewBox);
   }
@@ -265,30 +260,20 @@
     // Determine scroll direction
     const scrollDirection = scrollY > (window.lastScrollY || 0) ? 'down' : 'up';
     
-    // Update debug info
-    debugInfo = {
-      scrollY: Math.round(scrollY),
-      step: Math.min(views.length - 1, Math.floor(scrollY / height)),
-      isActive: scrollY < totalScrollytellingHeight,
-      showPanel: scrollY < (views.length * height),
-      scrollDirection: scrollDirection,
-      lastUpdate: new Date().toLocaleTimeString(),
-      totalHeight: Math.round(totalScrollytellingHeight),
-      threshold: Math.round(views.length * height)
-    };
-    
     // 🐛 DEBUG: Log all scroll events, especially useful for mobile debugging
-    console.log(`📱 DEBUG - onScroll:`, {
-      scrollY,
-      height,
-      totalScrollytellingHeight,
-      currentStep: currentStep,
-      calculatedStep: Math.min(views.length - 1, Math.floor(scrollY / height)),
-      isScrollytellingActive: isScrollytellingActive,
-      showInfoPanel: showInfoPanel,
-      isMobile: window.innerWidth <= 768,
-      scrollDirection: scrollDirection
-    });
+    if (FORCE_DEBUG || browser) {
+      console.log(`📱 DEBUG - onScroll:`, {
+        scrollY,
+        height,
+        totalScrollytellingHeight,
+        currentStep: currentStep,
+        calculatedStep: Math.min(views.length - 1, Math.floor(scrollY / height)),
+        isScrollytellingActive: isScrollytellingActive,
+        showInfoPanel: showInfoPanel,
+        isMobile: window.innerWidth <= 768,
+        scrollDirection: scrollDirection
+      });
+    }
     
     // Store last scroll position for direction detection
     window.lastScrollY = scrollY;
@@ -296,36 +281,54 @@
     // Check if we're still in the scrollytelling section
     if (scrollY < totalScrollytellingHeight) {
       const newScrollytellingState = true;
-      const step = Math.min(views.length - 1, Math.floor(scrollY / height));
+      const calculatedStep = Math.min(views.length - 1, Math.floor(scrollY / height));
+      
+      // 🔧 FIX: Prevent step jumping by limiting step changes
+      let step;
+      if (scrollDirection === 'up' && calculatedStep < currentStep - 1) {
+        // When scrolling up, only allow moving one step at a time
+        step = currentStep - 1;
+        if (FORCE_DEBUG || browser) {
+          console.log(`📱 DEBUG - Step jump prevented: calculated=${calculatedStep}, using=${step}`);
+        }
+      } else if (scrollDirection === 'down' && calculatedStep > currentStep + 1) {
+        // When scrolling down, only allow moving one step at a time
+        step = currentStep + 1;
+        if (FORCE_DEBUG || browser) {
+          console.log(`📱 DEBUG - Step jump prevented: calculated=${calculatedStep}, using=${step}`);
+        }
+      } else {
+        step = calculatedStep;
+      }
 
       // 🐛 DEBUG: Log when scrollytelling state changes
       if (newScrollytellingState !== isScrollytellingActive) {
-        console.log(`📱 DEBUG - Scrollytelling state changed:`, {
-          from: isScrollytellingActive,
-          to: newScrollytellingState,
-          scrollY,
-          totalScrollytellingHeight
-        });
+        if (FORCE_DEBUG || browser) {
+          console.log(`📱 DEBUG - Scrollytelling state changed:`, {
+            from: isScrollytellingActive,
+            to: newScrollytellingState,
+            scrollY,
+            totalScrollytellingHeight
+          });
+        }
       }
 
       isScrollytellingActive = newScrollytellingState;
 
       // 🐛 DEBUG: Log step changes
       if (step !== currentStep) {
-        console.log(`📱 DEBUG - Step changed:`, {
-          from: currentStep,
-          to: step,
-          fromName: views[currentStep]?.name,
-          toName: views[step]?.name,
-          scrollY,
-          calculationDetails: {
+        if (FORCE_DEBUG || browser) {
+          console.log(`📱 DEBUG - Step changed:`, {
+            from: currentStep,
+            to: step,
+            fromName: views[currentStep]?.name,
+            toName: views[step]?.name,
             scrollY,
-            height,
-            division: scrollY / height,
-            floor: Math.floor(scrollY / height),
-            min: Math.min(views.length - 1, Math.floor(scrollY / height))
-          }
-        });
+            scrollDirection,
+            calculatedStep,
+            actualStep: step
+          });
+        }
         
         currentStep = step;
         updateViewBox(currentStep, window.innerWidth, window.innerHeight);
@@ -337,25 +340,29 @@
       
       // 🐛 DEBUG: Log info panel visibility changes
       if (newShowInfoPanel !== showInfoPanel) {
-        console.log(`📱 DEBUG - Info panel visibility changed:`, {
-          from: showInfoPanel,
-          to: newShowInfoPanel,
-          scrollY,
-          lastStepThreshold,
-          reason: scrollY < lastStepThreshold ? 'Within threshold' : 'Past threshold'
-        });
+        if (FORCE_DEBUG || browser) {
+          console.log(`📱 DEBUG - Info panel visibility changed:`, {
+            from: showInfoPanel,
+            to: newShowInfoPanel,
+            scrollY,
+            lastStepThreshold,
+            reason: scrollY < lastStepThreshold ? 'Within threshold' : 'Past threshold'
+          });
+        }
       }
       
       showInfoPanel = newShowInfoPanel;
       
     } else {
       // We've scrolled past the scrollytelling section
-      console.log(`📱 DEBUG - Past scrollytelling section:`, {
-        scrollY,
-        totalScrollytellingHeight,
-        wasActive: isScrollytellingActive,
-        wasShowingPanel: showInfoPanel
-      });
+      if (FORCE_DEBUG || browser) {
+        console.log(`📱 DEBUG - Past scrollytelling section:`, {
+          scrollY,
+          totalScrollytellingHeight,
+          wasActive: isScrollytellingActive,
+          wasShowingPanel: showInfoPanel
+        });
+      }
       
       isScrollytellingActive = false;
       showInfoPanel = false; // Also hide info panel
@@ -363,12 +370,14 @@
   }
   
   function onResize() {
-    console.log(`📱 DEBUG - onResize:`, {
-      newWidth: window.innerWidth,
-      newHeight: window.innerHeight,
-      currentStep,
-      stepName: views[currentStep]?.name
-    });
+    if (FORCE_DEBUG || browser) {
+      console.log(`📱 DEBUG - onResize:`, {
+        newWidth: window.innerWidth,
+        newHeight: window.innerHeight,
+        currentStep,
+        stepName: views[currentStep]?.name
+      });
+    }
     
     updateViewBox(currentStep, window.innerWidth, window.innerHeight);
   }
@@ -436,15 +445,17 @@
   onMount(() => {
     if (!browser) return;
     
-    console.log(`📱 DEBUG - Component mounted:`, {
-      innerWidth: window.innerWidth,
-      innerHeight: window.innerHeight,
-      isMobile: window.innerWidth <= 768,
-      userAgent: navigator.userAgent,
-      initialCurrentStep: currentStep,
-      initialIsScrollytellingActive: isScrollytellingActive,
-      initialShowInfoPanel: showInfoPanel
-    });
+    if (FORCE_DEBUG || browser) {
+      console.log(`📱 DEBUG - Component mounted:`, {
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        isMobile: window.innerWidth <= 768,
+        userAgent: navigator.userAgent,
+        initialCurrentStep: currentStep,
+        initialIsScrollytellingActive: isScrollytellingActive,
+        initialShowInfoPanel: showInfoPanel
+      });
+    }
     
     // Start monitoring the large image load
     monitorLargeImageLoad();
@@ -477,28 +488,36 @@
     
     // 🐛 DEBUG: Add additional mobile-specific debugging
     if (window.innerWidth <= 768) {
-      console.log(`📱 DEBUG - Mobile device detected, adding touch event listeners`);
+      if (FORCE_DEBUG || browser) {
+        console.log(`📱 DEBUG - Mobile device detected, adding touch event listeners`);
+      }
       
       // Monitor touch events that might interfere with scroll
       document.addEventListener('touchstart', (e) => {
-        console.log(`📱 DEBUG - touchstart:`, {
-          touches: e.touches.length,
-          scrollY: window.scrollY
-        });
+        if (FORCE_DEBUG || browser) {
+          console.log(`📱 DEBUG - touchstart:`, {
+            touches: e.touches.length,
+            scrollY: window.scrollY
+          });
+        }
       });
       
       document.addEventListener('touchend', (e) => {
-        console.log(`📱 DEBUG - touchend:`, {
-          scrollY: window.scrollY,
-          currentStep,
-          isScrollytellingActive,
-          showInfoPanel
-        });
+        if (FORCE_DEBUG || browser) {
+          console.log(`📱 DEBUG - touchend:`, {
+            scrollY: window.scrollY,
+            currentStep,
+            isScrollytellingActive,
+            showInfoPanel
+          });
+        }
       });
     }
     
     return () => {
-      console.log(`📱 DEBUG - Component unmounting`);
+      if (FORCE_DEBUG || browser) {
+        console.log(`📱 DEBUG - Component unmounting`);
+      }
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
     };
@@ -506,12 +525,14 @@
   
   // Reactive statement to handle window size changes
   $: if (browser && innerWidth && innerHeight) {
-    console.log(`📱 DEBUG - Reactive statement triggered:`, {
-      innerWidth,
-      innerHeight,
-      currentStep,
-      stepName: views[currentStep]?.name
-    });
+    if (FORCE_DEBUG || browser) {
+      console.log(`📱 DEBUG - Reactive statement triggered:`, {
+        innerWidth,
+        innerHeight,
+        currentStep,
+        stepName: views[currentStep]?.name
+      });
+    }
     updateViewBox(currentStep, innerWidth, innerHeight);
   }
   
