@@ -81,7 +81,7 @@
       viewBox: [3100, 2200, 1246, 700], 
       labelVisible: true,
       adjustments: {
-        mobile: { offsetX: -100, offsetY: 100, scale: 0.70 },
+        mobile: { offsetX: -100, offsetY: 100, scale: 0.65 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.15 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.1 }
       },
@@ -109,7 +109,7 @@
       viewBox: [4200, 2250, 1246, 700], 
       labelVisible: true,
       adjustments: {
-        mobile: { offsetX: 120, offsetY: -150, scale: 0.6 },
+        mobile: { offsetX: 120, offsetY: -150, scale: 0.50 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: -180, scale: 0.7 }
       },
