@@ -39,7 +39,7 @@
       viewBox: [0, 0, 6000, 6750], 
       labelVisible: false,
       adjustments: {
-        mobile: { offsetX: 0, offsetY: 800, scale: 1.0 },
+        mobile: { offsetX: 0, offsetY: 1000, scale: 1.0 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.0 }
       },
