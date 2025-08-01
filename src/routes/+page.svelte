@@ -1,3 +1,4 @@
+
 <script>
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
@@ -10,9 +11,6 @@
   //lazy loading
   let highResImage;
   let isHighResLoaded = false;
-  
-  // Force debug to always show, even in production
-  const FORCE_DEBUG = true;
   
   function setupProgressiveLoading() {
     if (!browser || !highResImage) return;
@@ -40,9 +38,8 @@
       name: 'India', 
       viewBox: [0, 0, 6000, 6750], 
       labelVisible: false,
-      // ADD: Mobile adjustments for India step
       adjustments: {
-        mobile: { offsetX: 0, offsetY: 800, scale: 1.0 }, // Move up by 100px on mobile
+        mobile: { offsetX: 0, offsetY: 800, scale: 1.0 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.0 }
       },
@@ -55,9 +52,8 @@
       name: 'Punjab+Haryana', 
       viewBox: [900, 1150, 1958, 1100], 
       labelVisible: true,
-      // Custom adjustments for different screen sizes
       adjustments: {
-        mobile: { offsetX: 0, offsetY: 200, scale: 1.0 }, // Keep as is
+        mobile: { offsetX: 0, offsetY: 200, scale: 1.0 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.0 }
       },
@@ -70,9 +66,8 @@
       name: 'Uttar Pradesh', 
       viewBox: [1800, 1800, 1958, 1100], 
       labelVisible: true,
-      // Shift west to show western parts, expand width slightly
       adjustments: {
-        mobile: { offsetX: -90, offsetY: 0, scale: 0.8 }, // Move left, show more area
+        mobile: { offsetX: -90, offsetY: 0, scale: 0.8 },
         tablet: { offsetX: -150, offsetY: 0, scale: 0.95 },
         desktop: { offsetX: -100, offsetY: 0, scale: 1.0 }
       },
@@ -85,9 +80,8 @@
       name: 'Bihar', 
       viewBox: [3100, 2200, 1246, 700], 
       labelVisible: true,
-      // Shrink it a little as requested
       adjustments: {
-        mobile: { offsetX: -100, offsetY: 100, scale: 0.8 }, // Zoom out (shrink) more on mobile
+        mobile: { offsetX: -100, offsetY: 100, scale: 0.8 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.15 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.1 }
       },
@@ -127,16 +121,12 @@
   ];
   
   let currentStep = 0;
-  let isScrollytellingActive = true; // Track if scrollytelling is active
-  let showInfoPanel = true; // NEW: Separate control for info panel visibility
-  
-  // ADD: Track last known good state for mobile debugging
-  let lastValidStep = 0;
+  let isScrollytellingActive = true;
+  let showInfoPanel = true;
   let lastScrollDirection = 'down';
   
   const DURATION = 1000;
   
-  // ENHANCED: Helper function with custom adjustments per step and screen size
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
     const [x, y, width, height] = viewBoxArray;
     
@@ -155,12 +145,10 @@
     // Get adjustments for this step and screen size
     const adjustments = views[step].adjustments?.[screenCategory] || { offsetX: 0, offsetY: 0, scale: 1.0 };
     
-    // FIXED: For India overview (step 0), apply adjustments without zoom
+    // For India overview (step 0), apply adjustments without zoom
     if (step === 0) {
-      // Apply the adjustments to the base viewBox
       const adjustedX = x + adjustments.offsetX;
       const adjustedY = y + adjustments.offsetY;
-      
       const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
       return result;
     }
@@ -234,32 +222,14 @@
   });
   
   function updateViewBox(step, width, height) {
-    // Use the original viewBox coordinates with responsive adjustments
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
-  
-    if (FORCE_DEBUG || browser) {
-      console.log(`📱 DEBUG - updateViewBox called:`, {
-        step,
-        stepName: views[step].name,
-        width,
-        height,
-        originalViewBox,
-        responsiveViewBox,
-        currentStep,
-        isScrollytellingActive,
-        showInfoPanel
-      });
-    }
-  
     viewBoxStore.set(responsiveViewBox);
   }
   
-  // FIXED: Enhanced scroll handler with better mobile support
   function onScroll() {
     const scrollY = window.scrollY;
     const height = window.innerHeight;
-    // Add one extra viewport height so the last step is fully visible
     const totalScrollytellingHeight = (views.length + 1) * height;
     
     // Determine scroll direction with better tracking
@@ -267,28 +237,10 @@
     const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
     const scrollDelta = Math.abs(scrollY - lastScrollY);
     
-    // 🐛 DEBUG: Log all scroll events, especially useful for mobile debugging
-    if (FORCE_DEBUG || browser) {
-      console.log(`📱 DEBUG - onScroll:`, {
-        scrollY,
-        height,
-        totalScrollytellingHeight,
-        currentStep: currentStep,
-        calculatedStep: Math.min(views.length - 1, Math.floor(scrollY / height)),
-        isScrollytellingActive: isScrollytellingActive,
-        showInfoPanel: showInfoPanel,
-        isMobile: window.innerWidth <= 768,
-        scrollDirection: scrollDirection,
-        scrollDelta,
-        lastScrollY
-      });
-    }
-    
     // Store last scroll position for direction detection
     window.lastScrollY = scrollY;
     lastScrollDirection = scrollDirection;
     
-    // FIXED: Improved scroll position handling
     if (scrollY < totalScrollytellingHeight) {
       // We're in the scrollytelling section
       const wasScrollytellingActive = isScrollytellingActive;
@@ -298,16 +250,13 @@
       const rawStep = Math.floor(scrollY / height);
       const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
       
-      // FIXED: More lenient step changing - allow direct step changes when scrolling up from end
+      // Improved step changing - allow direct step changes when scrolling up from end
       let newStep;
       
       // If we're coming back from the end (scrolling up from outside scrollytelling area)
       if (!wasScrollytellingActive && scrollDirection === 'up') {
         // Allow jumping to the calculated step directly
         newStep = calculatedStep;
-        if (FORCE_DEBUG || browser) {
-          console.log(`📱 DEBUG - Returning from end, jumping to step:`, calculatedStep);
-        }
       } else {
         // Normal step progression - prevent excessive jumping
         if (scrollDirection === 'up' && calculatedStep < currentStep - 1) {
@@ -324,92 +273,29 @@
       // Ensure step is within bounds
       newStep = Math.min(views.length - 1, Math.max(0, newStep));
       
-      // 🐛 DEBUG: Log when scrollytelling state changes
-      if (isScrollytellingActive !== wasScrollytellingActive) {
-        if (FORCE_DEBUG || browser) {
-          console.log(`📱 DEBUG - Scrollytelling state changed:`, {
-            from: wasScrollytellingActive,
-            to: isScrollytellingActive,
-            scrollY,
-            totalScrollytellingHeight
-          });
-        }
-      }
-
-      // 🐛 DEBUG: Log step changes
+      // Update step if changed
       if (newStep !== currentStep) {
-        if (FORCE_DEBUG || browser) {
-          console.log(`📱 DEBUG - Step changed:`, {
-            from: currentStep,
-            to: newStep,
-            fromName: views[currentStep]?.name,
-            toName: views[newStep]?.name,
-            scrollY,
-            scrollDirection,
-            calculatedStep,
-            actualStep: newStep,
-            wasReturningFromEnd: !wasScrollytellingActive
-          });
-        }
-        
         currentStep = newStep;
-        lastValidStep = newStep; // Track last valid step
         updateViewBox(currentStep, window.innerWidth, window.innerHeight);
       }
       
-      // FIXED: Better info panel visibility logic
+      // Info panel visibility logic
       const lastStepThreshold = views.length * height; // Start of the extra viewport
       const newShowInfoPanel = scrollY < lastStepThreshold;
-      
-      // 🐛 DEBUG: Log info panel visibility changes
-      if (newShowInfoPanel !== showInfoPanel) {
-        if (FORCE_DEBUG || browser) {
-          console.log(`📱 DEBUG - Info panel visibility changed:`, {
-            from: showInfoPanel,
-            to: newShowInfoPanel,
-            scrollY,
-            lastStepThreshold,
-            reason: scrollY < lastStepThreshold ? 'Within threshold' : 'Past threshold'
-          });
-        }
-      }
-      
       showInfoPanel = newShowInfoPanel;
       
     } else {
       // We've scrolled past the scrollytelling section
-      if (FORCE_DEBUG || browser) {
-        console.log(`📱 DEBUG - Past scrollytelling section:`, {
-          scrollY,
-          totalScrollytellingHeight,
-          wasActive: isScrollytellingActive,
-          wasShowingPanel: showInfoPanel,
-          willResetToStep: 0
-        });
-      }
-      
-      // FIXED: When leaving scrollytelling area, reset to a known good state
       isScrollytellingActive = false;
       showInfoPanel = false;
-      
-      // Don't change step here - let the scroll back in handle it
     }
   }
   
-  // FIXED: Throttled resize handler for better mobile performance
+  // Throttled resize handler for better mobile performance
   let resizeTimeout;
   function onResize() {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-      if (FORCE_DEBUG || browser) {
-        console.log(`📱 DEBUG - onResize:`, {
-          newWidth: window.innerWidth,
-          newHeight: window.innerHeight,
-          currentStep,
-          stepName: views[currentStep]?.name
-        });
-      }
-      
       updateViewBox(currentStep, window.innerWidth, window.innerHeight);
     }, 100); // Debounce resize events
   }
@@ -424,7 +310,6 @@
     setTimeout(() => {
       const svgElement = document.querySelector('.svg-wrapper svg');
       if (svgElement) {
-        // Try with various xlink:href syntaxes since SVG namespaces can be tricky
         const imageElement = 
           svgElement.querySelector('image[xlink\\:href="large_image.png"]') || 
           svgElement.querySelector('image[href="large_image.png"]') ||
@@ -444,7 +329,7 @@
             
             // Add error event listener
             imageElement.addEventListener('error', () => {
-              // Error handling without console.log
+              // Error handling
             });
           }
         }
@@ -477,24 +362,11 @@
   onMount(() => {
     if (!browser) return;
     
-    if (FORCE_DEBUG || browser) {
-      console.log(`📱 DEBUG - Component mounted:`, {
-        innerWidth: window.innerWidth,
-        innerHeight: window.innerHeight,
-        isMobile: window.innerWidth <= 768,
-        userAgent: navigator.userAgent,
-        initialCurrentStep: currentStep,
-        initialIsScrollytellingActive: isScrollytellingActive,
-        initialShowInfoPanel: showInfoPanel
-      });
-    }
-    
     // Start monitoring the large image load
     monitorLargeImageLoad();
-  
     setupProgressiveLoading();
     
-    // FIXED: Use passive scroll listeners for better mobile performance
+    // Use passive scroll listeners for better mobile performance
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
   
@@ -519,81 +391,19 @@
       });
     }
     
-    // 🐛 DEBUG: Add additional mobile-specific debugging
-    if (window.innerWidth <= 768) {
-      if (FORCE_DEBUG || browser) {
-        console.log(`📱 DEBUG - Mobile device detected, adding touch event listeners`);
-      }
-      
-      // FIXED: Better touch event handling for mobile
-      let touchStartY = 0;
-      
-      document.addEventListener('touchstart', (e) => {
-        touchStartY = e.touches[0].clientY;
-        if (FORCE_DEBUG || browser) {
-          console.log(`📱 DEBUG - touchstart:`, {
-            touches: e.touches.length,
-            scrollY: window.scrollY,
-            touchY: touchStartY
-          });
-        }
-      }, { passive: true });
-      
-      document.addEventListener('touchend', (e) => {
-        if (FORCE_DEBUG || browser) {
-          console.log(`📱 DEBUG - touchend:`, {
-            scrollY: window.scrollY,
-            currentStep,
-            isScrollytellingActive,
-            showInfoPanel
-          });
-        }
-      }, { passive: true });
-      
-      // ADDED: Monitor for iOS-specific scroll issues
-      document.addEventListener('touchmove', (e) => {
-        const touchY = e.touches[0].clientY;
-        const deltaY = touchStartY - touchY;
-        
-        if (FORCE_DEBUG || browser) {
-          console.log(`📱 DEBUG - touchmove:`, {
-            deltaY,
-            scrollY: window.scrollY,
-            currentStep,
-            direction: deltaY > 0 ? 'up' : 'down'
-          });
-        }
-      }, { passive: true });
-    }
-    
     return () => {
-      if (FORCE_DEBUG || browser) {
-        console.log(`📱 DEBUG - Component unmounting`);
-      }
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
       clearTimeout(resizeTimeout);
     };
   });
   
-  // FIXED: Better reactive statement with bounds checking
+  // Reactive statement with bounds checking
   $: if (browser && innerWidth && innerHeight) {
-    if (FORCE_DEBUG || browser) {
-      console.log(`📱 DEBUG - Reactive statement triggered:`, {
-        innerWidth,
-        innerHeight,
-        currentStep,
-        stepName: views[currentStep]?.name
-      });
-    }
-    
     // Ensure currentStep is within bounds before updating
     const safeStep = Math.min(views.length - 1, Math.max(0, currentStep));
     if (safeStep !== currentStep) {
       currentStep = safeStep;
-      if (FORCE_DEBUG || browser) {
-        console.log(`📱 DEBUG - Corrected currentStep to:`, safeStep);
-      }
     }
     
     updateViewBox(currentStep, innerWidth, innerHeight);
@@ -602,14 +412,6 @@
 </script>
 
 <style>
-  
-  /* html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    overflow-x: hidden;
-  } */
-
   .svg-wrapper {
     position: fixed;
     top: 0; left: 0;
@@ -725,15 +527,15 @@
   }
 
   .credits {
-  font-family: Georgia, serif;
-  font-style: oblique;
-  font-weight: 300;
-  margin-top: 2rem;
-  font-size: 1rem;
-  color: #4a4a4a;
+    font-family: Georgia, serif;
+    font-style: oblique;
+    font-weight: 300;
+    margin-top: 2rem;
+    font-size: 1rem;
+    color: #4a4a4a;
   }
 
-  /* FIXED: Enhanced Mobile Responsive styles */
+  /* Mobile Responsive */
   @media (max-width: 768px) {
     .info-panel {
       left: 16px;
@@ -742,10 +544,9 @@
       width: auto;
       padding: 20px;
       top: auto;
-      bottom: 20px; /* Fixed at bottom for mobile - this works perfectly with your map adjustment */
+      bottom: 20px;
       transform: none;
       border-radius: 16px;
-      /* ADDED: Ensure better mobile visibility */
       backdrop-filter: blur(15px);
       -webkit-backdrop-filter: blur(15px); /* iOS Safari support */
     }
@@ -778,8 +579,8 @@
     }
 
     .credits {
-    font-size: 0.9rem;
-    margin-top: 1.5rem;
+      font-size: 0.9rem;
+      margin-top: 1.5rem;
     }
   }
 
@@ -810,41 +611,35 @@
     }
     
     .credits {
-    font-size: 0.85rem;
-    margin-top: 1rem;
+      font-size: 0.85rem;
+      margin-top: 1rem;
     }
   }
 
-.chart-elements {
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.chart-elements.visible {
-  opacity: 1;
-}
-
-/* ADDED: Fix for iOS Safari scrolling issues */
-@supports (-webkit-touch-callout: none) {
-  .svg-wrapper {
-    /* Improve rendering on iOS */
-    -webkit-transform: translate3d(0, 0, 0);
-    transform: translate3d(0, 0, 0);
+  .chart-elements {
+    opacity: 0;
+    transition: opacity 0.3s ease;
   }
-  
-  .info-panel {
-    /* Improve rendering on iOS */
-    -webkit-transform: translate3d(0, 0, 0);
-    transform: translate3d(0, 0, 0);
+
+  .chart-elements.visible {
+    opacity: 1;
   }
-}
+
+  /* Fix for iOS Safari scrolling issues */
+  @supports (-webkit-touch-callout: none) {
+    .svg-wrapper {
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+    }
+    
+    .info-panel {
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+    }
+  }
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
-
-<!-- <div style="position: fixed; top: 20px; left: 20px; width: 200px; height: 100px; background: red; color: white; z-index: 99999; font-size: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-  TEST DIV WORKS!
-</div> -->
 
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
@@ -1058,33 +853,11 @@
   <section style="height: 100vh;"></section>
 {/each}
 
-<!-- Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive
+Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive
 {#if showInfoPanel && views[currentStep]?.info}
 <div class="info-panel" class:visible={views[currentStep].info}>
   <h2>{views[currentStep].info.title}</h2>
   <p>{@html views[currentStep].info.content}</p>
-</div>
-{/if} -->
-
-<!-- FIXED: Info Panel with better mobile debug info -->
-{#if showInfoPanel && views[currentStep]?.info}
-<div class="info-panel" class:visible={views[currentStep].info}>
-  <h2>{views[currentStep].info.title}</h2>
-  <p>{@html views[currentStep].info.content}</p>
-  
-  <!-- IMPROVED: Better mobile debug panel -->
-  {#if browser && (FORCE_DEBUG || window.innerWidth <= 768)}
-  <div style="margin-top: 15px; padding: 10px; background: rgba(255,0,0,0.8); color: white; font-size: 11px; font-family: monospace; border-radius: 5px; line-height: 1.3;">
-    <div><strong>🐛 MOBILE DEBUG</strong></div>
-    <div>ScrollY: {Math.round(typeof window !== 'undefined' ? window.scrollY : 0)}</div>
-    <div>Height: {typeof window !== 'undefined' ? window.innerHeight : 0}</div>
-    <div>Step: {currentStep}/{views.length - 1} ({views[currentStep]?.name})</div>
-    <div>Active: {isScrollytellingActive ? 'YES' : 'NO'}</div>
-    <div>Panel: {showInfoPanel ? 'YES' : 'NO'}</div>
-    <div>LastDir: {lastScrollDirection}</div>
-    <div>Calc: {typeof window !== 'undefined' ? Math.floor(window.scrollY / window.innerHeight) : 0}</div>
-  </div>
-  {/if}
 </div>
 {/if}
 
@@ -1184,14 +957,5 @@
     <div class="credits">
       Source: Mapping global floods with 10 years of satellite radar data | Copernicus GLO-30 Digital Elevation Model
     </div>
-    <!-- ADDED: Debug info in text content for mobile testing -->
-    {#if browser && FORCE_DEBUG && window.innerWidth <= 768}
-    <div style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; font-size: 10px; border-radius: 5px; z-index: 9999;">
-      <div><strong>MOBILE DEBUG</strong></div>
-      <div>ScrollY: {typeof window !== 'undefined' ? Math.round(window.scrollY) : 0}</div>
-      <div>Total: {typeof window !== 'undefined' ? (views.length + 1) * window.innerHeight : 0}</div>
-      <div>InScrolly: {isScrollytellingActive ? 'YES' : 'NO'}</div>
-    </div>
-    {/if}
   </div>
 </div>
