@@ -632,27 +632,6 @@
     color: #4a4a4a;
   }
 
-  /* Debug Panel Styles */
-  .debug-panel {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 10px;
-    border-radius: 8px;
-    font-family: monospace;
-    font-size: 12px;
-    z-index: 9999;
-    line-height: 1.3;
-    min-width: 200px;
-    backdrop-filter: blur(10px);
-  }
-
-  .debug-panel div {
-    margin: 2px 0;
-  }
-
   /* Text content section that appears after scrollytelling */
   .text-content {
     position: relative;
@@ -781,9 +760,9 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<div style="position: fixed; top: 20px; left: 20px; width: 200px; height: 100px; background: red; color: white; z-index: 99999; font-size: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+<!-- <div style="position: fixed; top: 20px; left: 20px; width: 200px; height: 100px; background: red; color: white; z-index: 99999; font-size: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
   TEST DIV WORKS!
-</div>
+</div> -->
 
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
