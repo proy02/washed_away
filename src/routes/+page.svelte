@@ -53,7 +53,7 @@
       viewBox: [900, 1150, 1958, 1100], 
       labelVisible: true,
       adjustments: {
-        mobile: { offsetX: 0, offsetY: 200, scale: 1.0 },
+        mobile: { offsetX: -100, offsetY: 200, scale: 1.0 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.0 }
       },
@@ -457,7 +457,7 @@
   /* Info Panel Styles */
   .info-panel {
     position: fixed;
-    top: 45%;
+    top: 70%;
     left: 20px;
     transform: translateY(-50%);
     background: rgba(255, 255, 255, 0.95);
@@ -865,7 +865,7 @@ Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytelli
   <div class="container">
     <h1>Washed Away!</h1>
 
-    <p style="font-family: Georgia, serif; font-style: oblique; text-align: center; font-weight: 300; color: #555; width: 100%; display: block;"> By Pulaha Roy and Nandita Banerjee</p>
+    <p style="font-family: Georgia, serif; font-style: oblique; text-align: center; font-weight: 300; color: #555; width: 100%; display: block;"> By Pulaha Roy and Nandita Banerji</p>
 
     <p style="font-family: Georgia, serif; font-style: oblique; font-weight: 300; color: #555; line-height: 1.5;">Microsoft&#39;s new AI-powered flood dataset highlights India&#39;s growing vulnerability,
       revealing that one in every 10 square kilometres has experienced flooding over the past
