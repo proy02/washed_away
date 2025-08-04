@@ -702,6 +702,66 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
+<!-- MOBILE DEBUG PANEL - Only shows on mobile devices -->
+{#if browser && isMobile}
+<div class="mobile-debug">
+  <div><strong>🔍 MOBILE SCROLL DEBUG</strong></div>
+  <div class="debug-grid">
+    <div class="debug-item">
+      <span>ScrollY:</span>
+      <span>{debugInfo.scrollY}</span>
+    </div>
+    <div class="debug-item">
+      <span>Height:</span>
+      <span>{debugInfo.height}</span>
+    </div>
+    <div class="debug-item">
+      <span>Raw Step:</span>
+      <span>{debugInfo.rawStep}</span>
+    </div>
+    <div class="debug-item">
+      <span>Calc Step:</span>
+      <span>{debugInfo.calculatedStep}</span>
+    </div>
+    <div class="debug-item" class:changed={debugInfo.stepChanged}>
+      <span>Current:</span>
+      <span>{debugInfo.currentStep} ({views[debugInfo.currentStep]?.name || 'N/A'})</span>
+    </div>
+    <div class="debug-item">
+      <span>Direction:</span>
+      <span>{debugInfo.scrollDirection}</span>
+    </div>
+    <div class="debug-item">
+      <span>Delta:</span>
+      <span>{debugInfo.scrollDelta}</span>
+    </div>
+    <div class="debug-item">
+      <span>Active:</span>
+      <span>{debugInfo.isScrollytellingActive ? 'YES' : 'NO'}</span>
+    </div>
+    <div class="debug-item">
+      <span>Panel:</span>
+      <span>{debugInfo.showInfoPanel ? 'YES' : 'NO'}</span>
+    </div>
+    <div class="debug-item" class:changed={debugInfo.stepChanged}>
+      <span>Changed:</span>
+      <span>{debugInfo.stepChanged ? 'YES' : 'NO'}</span>
+    </div>
+  </div>
+  <div style="margin-top: 8px; font-size: 10px; opacity: 0.8;">
+    Total: {debugInfo.totalHeight} | Last: {debugInfo.lastScrollY}
+  </div>
+</div>
+{/if}
+
+<!--Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
+{#if showInfoPanel && views[currentStep]?.info}
+<div class="info-panel" class:visible={views[currentStep].info}>
+  <h2>{views[currentStep].info.title}</h2>
+  <p>{@html views[currentStep].info.content}</p>
+</div>
+{/if}
+
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
     <g id="Layer_1" data-name="Layer 1">
@@ -912,66 +972,6 @@
 {#each Array(views.length + 1) as _, i}
   <section style="height: 100vh;"></section>
 {/each}
-
-<!-- MOBILE DEBUG PANEL - Only shows on mobile devices -->
-{#if browser && isMobile}
-<div class="mobile-debug">
-  <div><strong>🔍 MOBILE SCROLL DEBUG</strong></div>
-  <div class="debug-grid">
-    <div class="debug-item">
-      <span>ScrollY:</span>
-      <span>{debugInfo.scrollY}</span>
-    </div>
-    <div class="debug-item">
-      <span>Height:</span>
-      <span>{debugInfo.height}</span>
-    </div>
-    <div class="debug-item">
-      <span>Raw Step:</span>
-      <span>{debugInfo.rawStep}</span>
-    </div>
-    <div class="debug-item">
-      <span>Calc Step:</span>
-      <span>{debugInfo.calculatedStep}</span>
-    </div>
-    <div class="debug-item" class:changed={debugInfo.stepChanged}>
-      <span>Current:</span>
-      <span>{debugInfo.currentStep} ({views[debugInfo.currentStep]?.name || 'N/A'})</span>
-    </div>
-    <div class="debug-item">
-      <span>Direction:</span>
-      <span>{debugInfo.scrollDirection}</span>
-    </div>
-    <div class="debug-item">
-      <span>Delta:</span>
-      <span>{debugInfo.scrollDelta}</span>
-    </div>
-    <div class="debug-item">
-      <span>Active:</span>
-      <span>{debugInfo.isScrollytellingActive ? 'YES' : 'NO'}</span>
-    </div>
-    <div class="debug-item">
-      <span>Panel:</span>
-      <span>{debugInfo.showInfoPanel ? 'YES' : 'NO'}</span>
-    </div>
-    <div class="debug-item" class:changed={debugInfo.stepChanged}>
-      <span>Changed:</span>
-      <span>{debugInfo.stepChanged ? 'YES' : 'NO'}</span>
-    </div>
-  </div>
-  <div style="margin-top: 8px; font-size: 10px; opacity: 0.8;">
-    Total: {debugInfo.totalHeight} | Last: {debugInfo.lastScrollY}
-  </div>
-</div>
-{/if}
-
-<!--Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
-{#if showInfoPanel && views[currentStep]?.info}
-<div class="info-panel" class:visible={views[currentStep].info}>
-  <h2>{views[currentStep].info.title}</h2>
-  <p>{@html views[currentStep].info.content}</p>
-</div>
-{/if}
 
 <div class="text-content">
   <div class="container">
