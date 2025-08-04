@@ -7,6 +7,24 @@
   let innerWidth;
   let innerHeight;
   
+  // Mobile debugging
+  let isMobile = false;
+  let debugInfo = {
+    scrollY: 0,
+    height: 0,
+    rawStep: 0,
+    calculatedStep: 0,
+    currentStep: 0,
+    isScrollytellingActive: false,
+    showInfoPanel: false,
+    scrollDirection: 'down',
+    scrollDelta: 0,
+    totalHeight: 0,
+    stepChanged: false,
+    lastScrollY: 0,
+    wasScrollytellingActive: false
+  };
+  
   //lazy loading
   let highResImage;
   let isHighResLoaded = false;
@@ -14,15 +32,22 @@
   function setupProgressiveLoading() {
     if (!browser || !highResImage) return;
     
+    // Start loading high-res after a delay
     setTimeout(() => {
-      try {
-        highResImage.style.transition = 'opacity 0.8s ease-in-out';
-        highResImage.style.opacity = '1';
-        isHighResLoaded = true;
-      } catch (error) {
-        console.warn('Progressive loading error:', error);
-      }
-    }, 1000);
+      highResImage.style.transition = 'opacity 0.8s ease-in-out';
+      highResImage.style.opacity = '1';
+      isHighResLoaded = true;
+    }, 1000); // Wait 1 second, then fade in high-res
+  }
+  
+  // Performance measurement variables
+  let pageLoadStartTime;
+  let imageLoadStart;
+  let imageLoadEnd;
+  
+  // Only start timing in the browser, not during SSR
+  if (browser) {
+    pageLoadStartTime = performance.now();
   }
   
   const views = [
@@ -31,7 +56,7 @@
       viewBox: [0, 0, 6000, 6750], 
       labelVisible: false,
       adjustments: {
-        mobile: { offsetX: 0, offsetY: 0, scale: 1.0 },
+        mobile: { offsetX: 0, offsetY: 800, scale: 1.0 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.0 }
       },
@@ -45,7 +70,7 @@
       viewBox: [900, 1150, 1958, 1100], 
       labelVisible: true,
       adjustments: {
-        mobile: { offsetX: -100, offsetY: 200, scale: 1.0 },
+        mobile: { offsetX: 0, offsetY: 200, scale: 1.0 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.0 }
       },
@@ -59,7 +84,7 @@
       viewBox: [1800, 1800, 1958, 1100], 
       labelVisible: true,
       adjustments: {
-        mobile: { offsetX: -90, offsetY: -100, scale: 0.65 },
+        mobile: { offsetX: -90, offsetY: 0, scale: 0.8 },
         tablet: { offsetX: -150, offsetY: 0, scale: 0.95 },
         desktop: { offsetX: -100, offsetY: 0, scale: 1.0 }
       },
@@ -73,7 +98,7 @@
       viewBox: [3100, 2200, 1246, 700], 
       labelVisible: true,
       adjustments: {
-        mobile: { offsetX: -100, offsetY: 100, scale: 0.65 },
+        mobile: { offsetX: -100, offsetY: 100, scale: 0.8 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.15 },
         desktop: { offsetX: 0, offsetY: 0, scale: 1.1 }
       },
@@ -101,7 +126,7 @@
       viewBox: [4200, 2250, 1246, 700], 
       labelVisible: true,
       adjustments: {
-        mobile: { offsetX: 120, offsetY: -150, scale: 0.50 },
+        mobile: { offsetX: 120, offsetY: -150, scale: 0.6 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.0 },
         desktop: { offsetX: 0, offsetY: -180, scale: 0.7 }
       },
@@ -117,117 +142,89 @@
   let showInfoPanel = true;
   let lastScrollDirection = 'down';
   
-  // Shorter duration for mobile
-  const DURATION = 800;
-  
-  // Track current viewBox manually (instead of using .get())
-  let currentViewBox = views[0].viewBox;
+  const DURATION = 1000;
   
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
-    try {
-      const [x, y, width, height] = viewBoxArray;
-      
-      // Determine screen category
-      let screenCategory = 'desktop';
-      if (windowWidth <= 480) {
-        screenCategory = 'mobile';
-      } else if (windowWidth <= 768) {
-        screenCategory = 'mobile';
-      } else if (windowWidth <= 1024) {
-        screenCategory = 'tablet';
-      } else {
-        screenCategory = 'desktop';
-      }
-      
-      // Get adjustments for this step and screen size
-      const adjustments = views[step].adjustments?.[screenCategory] || { offsetX: 0, offsetY: 0, scale: 1.0 };
-      
-      // For India overview (step 0), apply adjustments without zoom
-      if (step === 0) {
-        const adjustedX = x + adjustments.offsetX;
-        const adjustedY = y + adjustments.offsetY;
-        const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
-        return result;
-      }
-      
-      // Get base zoom factor for non-India steps
-      let zoomFactor = 1;
-      
-      if (windowWidth <= 480) {
-        zoomFactor = 2.0;
-      } else if (windowWidth <= 768) {
-        zoomFactor = 1.6;
-      } else if (windowWidth <= 1024) {
-        zoomFactor = 1.3;
-      } else {
-        zoomFactor = 1.0;
-      }
-      
-      // Apply custom scale to zoom factor
-      const finalZoomFactor = zoomFactor * adjustments.scale;
-      
-      // Apply zoom by reducing viewBox dimensions (zooms in)
-      const zoomedWidth = width / finalZoomFactor;
-      const zoomedHeight = height / finalZoomFactor;
-      
-      // Calculate center with custom offset
-      const centerX = x + width / 2 + adjustments.offsetX;
-      const centerY = y + height / 2 + adjustments.offsetY;
-      
-      const newX = centerX - zoomedWidth / 2;
-      const newY = centerY - zoomedHeight / 2;
-      
-      // Now adjust for aspect ratio
-      const result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
-      
-      return result;
-      
-    } catch (error) {
-      console.error('getResponsiveViewBox error:', error);
-      return [0, 0, 6000, 6750]; // Safe fallback
+    const [x, y, width, height] = viewBoxArray;
+    
+    // Determine screen category
+    let screenCategory = 'desktop';
+    if (windowWidth <= 480) {
+      screenCategory = 'mobile';
+    } else if (windowWidth <= 768) {
+      screenCategory = 'mobile';
+    } else if (windowWidth <= 1024) {
+      screenCategory = 'tablet';
+    } else {
+      screenCategory = 'desktop';
     }
+    
+    // Get adjustments for this step and screen size
+    const adjustments = views[step]?.adjustments?.[screenCategory] || { offsetX: 0, offsetY: 0, scale: 1.0 };
+    
+    // For India overview (step 0), apply adjustments without zoom
+    if (step === 0) {
+      const adjustedX = x + adjustments.offsetX;
+      const adjustedY = y + adjustments.offsetY;
+      const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
+      return result;
+    }
+    
+    // Get base zoom factor for non-India steps
+    let zoomFactor = 1;
+    
+    if (windowWidth <= 480) {
+      zoomFactor = 2.0;
+    } else if (windowWidth <= 768) {
+      zoomFactor = 1.6;
+    } else if (windowWidth <= 1024) {
+      zoomFactor = 1.3;
+    } else {
+      zoomFactor = 1.0;
+    }
+    
+    // Apply custom scale to zoom factor
+    const finalZoomFactor = zoomFactor * adjustments.scale;
+    
+    // Apply zoom by reducing viewBox dimensions (zooms in)
+    const zoomedWidth = width / finalZoomFactor;
+    const zoomedHeight = height / finalZoomFactor;
+    
+    // Calculate center with custom offset
+    const centerX = x + width / 2 + adjustments.offsetX;
+    const centerY = y + height / 2 + adjustments.offsetY;
+    
+    const newX = centerX - zoomedWidth / 2;
+    const newY = centerY - zoomedHeight / 2;
+    
+    // Now adjust for aspect ratio
+    const result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
+    
+    return result;
   }
   
   // Helper function to adjust viewBox for screen aspect ratio
   function adjustForAspectRatio(x, y, width, height, windowWidth, windowHeight) {
-    try {
-      const viewBoxAspectRatio = width / height;
-      const windowAspectRatio = windowWidth / windowHeight;
-      
-      let result;
-      // If window is wider than viewBox, expand width to fit
-      if (windowAspectRatio > viewBoxAspectRatio) {
-        const adjustedWidth = height * windowAspectRatio;
-        const widthDiff = adjustedWidth - width;
-        const newX = x - widthDiff / 2;
-        result = [newX, y, adjustedWidth, height];
-      } 
-      // If window is taller than viewBox, expand height to fit
-      else {
-        const adjustedHeight = width / windowAspectRatio;
-        const heightDiff = adjustedHeight - height;
-        const newY = y - heightDiff / 2;
-        result = [x, newY, width, adjustedHeight];
-      }
-      
-      // Safety checks - prevent extreme values
-      if (result[0] < -3000 || result[1] < -3000 || result[2] > 50000 || result[3] > 50000) {
-        console.warn('Extreme viewBox values, using fallback');
-        return [0, 0, 6000, 6750];
-      }
-      
-      // Check for invalid values
-      if (result.some(v => !isFinite(v) || isNaN(v))) {
-        console.error('Invalid viewBox result:', result);
-        return [0, 0, 6000, 6750];
-      }
-      
-      return result;
-      
-    } catch (error) {
-      console.error('adjustForAspectRatio error:', error);
-      return [0, 0, 6000, 6750];
+    const viewBoxAspectRatio = width / height;
+    const windowAspectRatio = windowWidth / windowHeight;
+    
+    let result;
+    // If window is wider than viewBox, expand width to fit
+    if (windowAspectRatio > viewBoxAspectRatio) {
+      const adjustedWidth = height * windowAspectRatio;
+      const widthDiff = adjustedWidth - width;
+      const newX = x - widthDiff / 2;
+      result = [newX, y, adjustedWidth, height];
+    } 
+    // If window is taller than viewBox, expand height to fit
+    else {
+      const adjustedHeight = width / windowAspectRatio;
+      const heightDiff = adjustedHeight - height;
+      const newY = y - heightDiff / 2;
+      result = [x, newY, width, adjustedHeight];
     }
+    
+    return result;
   }
   
   const viewBoxStore = tweened(views[0].viewBox, {
@@ -238,83 +235,87 @@
   let viewBoxString = '';
   
   viewBoxStore.subscribe(value => {
-    try {
-      // Check for invalid values in the animation
-      if (value.some(v => !isFinite(v) || isNaN(v))) {
-        console.error('Invalid viewBox in tween:', value);
-        return;
-      }
-      
-      // Update current viewBox tracking
-      currentViewBox = [...value];
-      viewBoxString = value.map(v => v.toFixed(2)).join(' ');
-      
-    } catch (error) {
-      console.error('ViewBox subscription error:', error);
-    }
+    viewBoxString = value.map(v => v.toFixed(2)).join(' ');
   });
   
   function updateViewBox(step, width, height) {
-    try {
-      // Safety checks
-      if (!width || !height || width <= 0 || height <= 0) {
-        console.warn('Invalid dimensions:', { width, height });
-        return;
-      }
-      
-      if (step < 0 || step >= views.length) {
-        console.warn('Invalid step:', step);
-        return;
-      }
-      
-      const originalViewBox = views[step].viewBox;
-      const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
-      
-      // Check for dramatic changes that might cause issues - using tracked currentViewBox
-      const maxChange = Math.max(
-        Math.abs(responsiveViewBox[0] - currentViewBox[0]),
-        Math.abs(responsiveViewBox[1] - currentViewBox[1]),
-        Math.abs(responsiveViewBox[2] - currentViewBox[2]),
-        Math.abs(responsiveViewBox[3] - currentViewBox[3])
-      );
-      
-      if (maxChange > 8000) {
-        console.warn('Large viewBox change:', maxChange.toFixed(0), 'units');
-      }
-      
-      viewBoxStore.set(responsiveViewBox);
-      
-    } catch (error) {
-      console.error('updateViewBox error:', error);
-    }
+    const originalViewBox = views[step].viewBox;
+    const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
+    viewBoxStore.set(responsiveViewBox);
   }
   
+  // ENHANCED: More robust scroll handler with better mobile step management
   function onScroll() {
-    try {
-      const scrollY = window.scrollY;
-      const height = window.innerHeight;
-      const totalScrollytellingHeight = (views.length + 1) * height;
+    const scrollY = window.scrollY;
+    const height = window.innerHeight;
+    const totalScrollytellingHeight = (views.length + 1) * height;
+    
+    // Determine scroll direction with better tracking
+    const lastScrollY = window.lastScrollY || 0;
+    const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
+    const scrollDelta = Math.abs(scrollY - lastScrollY);
+    
+    // Calculate raw step and bounded step
+    const rawStep = scrollY / height;
+    const calculatedStep = Math.min(views.length - 1, Math.max(0, Math.floor(rawStep)));
+    
+    // Store previous state for debugging
+    const wasScrollytellingActive = isScrollytellingActive;
+    const previousStep = currentStep;
+    
+    // Update debug info
+    debugInfo = {
+      scrollY: Math.round(scrollY),
+      height,
+      rawStep: rawStep.toFixed(2),
+      calculatedStep,
+      currentStep: previousStep,
+      isScrollytellingActive: wasScrollytellingActive,
+      showInfoPanel,
+      scrollDirection,
+      scrollDelta: Math.round(scrollDelta),
+      totalHeight: totalScrollytellingHeight,
+      stepChanged: false,
+      lastScrollY: Math.round(lastScrollY),
+      wasScrollytellingActive
+    };
+    
+    // Store last scroll position for direction detection
+    window.lastScrollY = scrollY;
+    lastScrollDirection = scrollDirection;
+    
+    if (scrollY < totalScrollytellingHeight) {
+      // We're in the scrollytelling section
+      isScrollytellingActive = true;
       
-      // Determine scroll direction
-      const lastScrollY = window.lastScrollY || 0;
-      const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
-      const scrollDelta = Math.abs(scrollY - lastScrollY);
+      // ENHANCED: More predictable step calculation
+      let newStep;
       
-      window.lastScrollY = scrollY;
-      lastScrollDirection = scrollDirection;
-      
-      if (scrollY < totalScrollytellingHeight) {
-        // We're in the scrollytelling section
-        const wasScrollytellingActive = isScrollytellingActive;
-        isScrollytellingActive = true;
+      // MOBILE-SPECIFIC: Use more direct step calculation to prevent freezing
+      if (isMobile) {
+        // For mobile, use a more direct approach with less restrictions
+        if (scrollDirection === 'up' && calculatedStep < currentStep) {
+          // When scrolling up, allow going back to calculated step directly
+          newStep = calculatedStep;
+        } else if (scrollDirection === 'down' && calculatedStep > currentStep) {
+          // When scrolling down, allow going forward to calculated step directly
+          newStep = calculatedStep;
+        } else {
+          // Stay at current step if not crossing boundaries
+          newStep = currentStep;
+        }
         
-        // Calculate the step based on scroll position
-        const rawStep = Math.floor(scrollY / height);
-        const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
+        // CRITICAL: Ensure step is always within bounds
+        newStep = Math.min(views.length - 1, Math.max(0, newStep));
         
-        // Step changing logic - simplified
-        let newStep;
-        
+        // Additional safety: Only change if it's a valid step
+        if (newStep !== currentStep && views[newStep]) {
+          debugInfo.stepChanged = true;
+          currentStep = newStep;
+          updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+        }
+      } else {
+        // Desktop logic (original)
         if (!wasScrollytellingActive && scrollDirection === 'up') {
           newStep = calculatedStep;
         } else {
@@ -329,51 +330,121 @@
         
         newStep = Math.min(views.length - 1, Math.max(0, newStep));
         
-        // Update step if changed
         if (newStep !== currentStep) {
+          debugInfo.stepChanged = true;
           currentStep = newStep;
-          
-          if (window.innerWidth && window.innerHeight) {
-            updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-          }
+          updateViewBox(currentStep, window.innerWidth, window.innerHeight);
         }
-        
-        const lastStepThreshold = views.length * height;
-        const newShowInfoPanel = scrollY < lastStepThreshold;
-        showInfoPanel = newShowInfoPanel;
-        
-      } else {
-        isScrollytellingActive = false;
-        showInfoPanel = false;
       }
       
-    } catch (error) {
-      console.error('onScroll error:', error);
+      // Info panel visibility logic
+      const lastStepThreshold = views.length * height;
+      showInfoPanel = scrollY < lastStepThreshold;
+      
+    } else {
+      // We've scrolled past the scrollytelling section
+      isScrollytellingActive = false;
+      showInfoPanel = false;
     }
+    
+    // Update final debug info
+    debugInfo.currentStep = currentStep;
+    debugInfo.isScrollytellingActive = isScrollytellingActive;
+    debugInfo.showInfoPanel = showInfoPanel;
   }
   
+  // Throttled resize handler for better mobile performance
   let resizeTimeout;
   function onResize() {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-      if (window.innerWidth && window.innerHeight) {
-        updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-      }
+      updateViewBox(currentStep, window.innerWidth, window.innerHeight);
     }, 100);
+  }
+  
+  // Monitor the loading time of the large image
+  function monitorLargeImageLoad() {
+    if (!browser) return;
+    
+    imageLoadStart = performance.now();
+    
+    setTimeout(() => {
+      const svgElement = document.querySelector('.svg-wrapper svg');
+      if (svgElement) {
+        const imageElement = 
+          svgElement.querySelector('image[xlink\\:href="large_image.png"]') || 
+          svgElement.querySelector('image[href="large_image.png"]') ||
+          svgElement.querySelector('image');
+        
+        if (imageElement) {
+          if (imageElement.complete) {
+            imageLoadEnd = performance.now();
+            const loadTime = imageLoadEnd - imageLoadStart;
+          } else {
+            imageElement.addEventListener('load', () => {
+              imageLoadEnd = performance.now();
+              const loadTime = imageLoadEnd - imageLoadStart;
+            });
+            
+            imageElement.addEventListener('error', () => {
+              // Error handling
+            });
+          }
+        }
+      }
+    }, 0);
+  }
+  
+  function checkResourcePerformance() {
+    if (!browser || !window.performance || !window.performance.getEntriesByType) return;
+    
+    setTimeout(() => {
+      const resources = window.performance.getEntriesByType('resource');
+      
+      const largeImage = resources.find(r => 
+        r.name.includes('large_image.png') || 
+        r.name.includes('large_image')
+      );
+      
+      if (largeImage) {
+        const totalLoadTime = largeImage.responseEnd - largeImage.startTime;
+        const networkTime = largeImage.responseStart - largeImage.startTime;
+        const downloadTime = largeImage.responseEnd - largeImage.responseStart;
+        const size = largeImage.transferSize ? (largeImage.transferSize / (1024 * 1024)).toFixed(2) : 'unknown';
+      }
+    }, 200);
   }
   
   onMount(() => {
     if (!browser) return;
     
+    // Detect mobile
+    isMobile = window.innerWidth <= 768;
+    
+    monitorLargeImageLoad();
     setupProgressiveLoading();
     
-    // Event listeners with better mobile support
+    // Use passive scroll listeners for better mobile performance
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
   
     // Initial update
-    if (window.innerWidth && window.innerHeight) {
-      updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+    updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+    
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        // DOM loaded
+      });
+    }
+    
+    if (document.readyState === 'complete') {
+      const loadTime = performance.now() - pageLoadStartTime;
+      checkResourcePerformance();
+    } else {
+      window.addEventListener('load', () => {
+        const loadTime = performance.now() - pageLoadStartTime;
+        checkResourcePerformance();
+      });
     }
     
     return () => {
@@ -385,6 +456,8 @@
   
   // Reactive statement with bounds checking
   $: if (browser && innerWidth && innerHeight) {
+    isMobile = innerWidth <= 768;
+    
     const safeStep = Math.min(views.length - 1, Math.max(0, currentStep));
     if (safeStep !== currentStep) {
       currentStep = safeStep;
@@ -839,6 +912,58 @@
 {#each Array(views.length + 1) as _, i}
   <section style="height: 100vh;"></section>
 {/each}
+
+<!-- MOBILE DEBUG PANEL - Only shows on mobile devices -->
+{#if browser && isMobile}
+<div class="mobile-debug">
+  <div><strong>🔍 MOBILE SCROLL DEBUG</strong></div>
+  <div class="debug-grid">
+    <div class="debug-item">
+      <span>ScrollY:</span>
+      <span>{debugInfo.scrollY}</span>
+    </div>
+    <div class="debug-item">
+      <span>Height:</span>
+      <span>{debugInfo.height}</span>
+    </div>
+    <div class="debug-item">
+      <span>Raw Step:</span>
+      <span>{debugInfo.rawStep}</span>
+    </div>
+    <div class="debug-item">
+      <span>Calc Step:</span>
+      <span>{debugInfo.calculatedStep}</span>
+    </div>
+    <div class="debug-item" class:changed={debugInfo.stepChanged}>
+      <span>Current:</span>
+      <span>{debugInfo.currentStep} ({views[debugInfo.currentStep]?.name || 'N/A'})</span>
+    </div>
+    <div class="debug-item">
+      <span>Direction:</span>
+      <span>{debugInfo.scrollDirection}</span>
+    </div>
+    <div class="debug-item">
+      <span>Delta:</span>
+      <span>{debugInfo.scrollDelta}</span>
+    </div>
+    <div class="debug-item">
+      <span>Active:</span>
+      <span>{debugInfo.isScrollytellingActive ? 'YES' : 'NO'}</span>
+    </div>
+    <div class="debug-item">
+      <span>Panel:</span>
+      <span>{debugInfo.showInfoPanel ? 'YES' : 'NO'}</span>
+    </div>
+    <div class="debug-item" class:changed={debugInfo.stepChanged}>
+      <span>Changed:</span>
+      <span>{debugInfo.stepChanged ? 'YES' : 'NO'}</span>
+    </div>
+  </div>
+  <div style="margin-top: 8px; font-size: 10px; opacity: 0.8;">
+    Total: {debugInfo.totalHeight} | Last: {debugInfo.lastScrollY}
+  </div>
+</div>
+{/if}
 
 <!--Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
 {#if showInfoPanel && views[currentStep]?.info}
