@@ -1,4 +1,3 @@
-
 <script>
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
@@ -7,6 +6,25 @@
   
   let innerWidth;
   let innerHeight;
+  
+  // Debug variables
+  let debugInfo = {
+    scrollY: 0,
+    calculatedStep: 0,
+    currentStep: 0,
+    scrollDirection: 'none',
+    scrollDelta: 0,
+    viewBoxString: '',
+    isScrollytellingActive: false,
+    showInfoPanel: false,
+    windowDimensions: '',
+    rawStep: 0,
+    lastScrollY: 0,
+    stepChangeReason: '',
+    viewBoxBounds: '',
+    freezeDetected: false,
+    lastUpdateTime: 0
+  };
   
   //lazy loading
   let highResImage;
@@ -130,6 +148,9 @@
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
     const [x, y, width, height] = viewBoxArray;
     
+    // Debug: Track viewBox calculation
+    debugInfo.viewBoxBounds = `Input: [${x}, ${y}, ${width}, ${height}]`;
+    
     // Determine screen category
     let screenCategory = 'desktop';
     if (windowWidth <= 480) {
@@ -150,6 +171,7 @@
       const adjustedX = x + adjustments.offsetX;
       const adjustedY = y + adjustments.offsetY;
       const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
+      debugInfo.viewBoxBounds += ` -> India: [${result.map(v => v.toFixed(2)).join(', ')}]`;
       return result;
     }
     
@@ -183,6 +205,8 @@
     // Now adjust for aspect ratio
     const result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
     
+    debugInfo.viewBoxBounds += ` -> ${views[step].name}: [${result.map(v => v.toFixed(2)).join(', ')}]`;
+    
     return result;
   }
   
@@ -207,6 +231,14 @@
       result = [x, newY, width, adjustedHeight];
     }
     
+    // Check for invalid values
+    if (result.some(v => !isFinite(v) || isNaN(v))) {
+      console.error('Invalid viewBox result:', result);
+      debugInfo.freezeDetected = true;
+      // Return a safe fallback
+      return [0, 0, 6000, 6750];
+    }
+    
     return result;
   }
   
@@ -219,11 +251,34 @@
   
   viewBoxStore.subscribe(value => {
     viewBoxString = value.map(v => v.toFixed(2)).join(' ');
+    debugInfo.viewBoxString = viewBoxString;
   });
   
   function updateViewBox(step, width, height) {
+    const now = performance.now();
+    debugInfo.lastUpdateTime = now;
+    
+    // Safety checks
+    if (!width || !height || width <= 0 || height <= 0) {
+      console.warn('Invalid dimensions:', { width, height });
+      return;
+    }
+    
+    if (step < 0 || step >= views.length) {
+      console.warn('Invalid step:', step);
+      return;
+    }
+    
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
+    
+    // Additional safety check
+    if (responsiveViewBox.some(v => !isFinite(v) || isNaN(v))) {
+      console.error('Invalid responsive viewBox:', responsiveViewBox);
+      debugInfo.freezeDetected = true;
+      return;
+    }
+    
     viewBoxStore.set(responsiveViewBox);
   }
   
@@ -232,10 +287,19 @@
     const height = window.innerHeight;
     const totalScrollytellingHeight = (views.length + 1) * height;
     
+    // Update debug info
+    debugInfo.scrollY = scrollY;
+    debugInfo.windowDimensions = `${window.innerWidth}x${window.innerHeight}`;
+    
     // Determine scroll direction with better tracking
     const lastScrollY = window.lastScrollY || 0;
     const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
     const scrollDelta = Math.abs(scrollY - lastScrollY);
+    
+    // Update debug info
+    debugInfo.lastScrollY = lastScrollY;
+    debugInfo.scrollDirection = scrollDirection;
+    debugInfo.scrollDelta = scrollDelta;
     
     // Store last scroll position for direction detection
     window.lastScrollY = scrollY;
@@ -245,49 +309,76 @@
       // We're in the scrollytelling section
       const wasScrollytellingActive = isScrollytellingActive;
       isScrollytellingActive = true;
+      debugInfo.isScrollytellingActive = true;
       
       // Calculate the step based on scroll position
       const rawStep = Math.floor(scrollY / height);
       const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
       
+      // Update debug info
+      debugInfo.rawStep = rawStep;
+      debugInfo.calculatedStep = calculatedStep;
+      
       // Improved step changing - allow direct step changes when scrolling up from end
       let newStep;
+      let stepChangeReason = '';
       
       // If we're coming back from the end (scrolling up from outside scrollytelling area)
       if (!wasScrollytellingActive && scrollDirection === 'up') {
         // Allow jumping to the calculated step directly
         newStep = calculatedStep;
+        stepChangeReason = 'Coming back from end';
       } else {
         // Normal step progression - prevent excessive jumping
         if (scrollDirection === 'up' && calculatedStep < currentStep - 1) {
           // When scrolling up, limit to one step back unless there's a big scroll delta (fast scroll)
           newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.max(0, currentStep - 1);
+          stepChangeReason = scrollDelta > height * 0.5 ? 'Fast scroll up' : 'Normal scroll up';
         } else if (scrollDirection === 'down' && calculatedStep > currentStep + 1) {
           // When scrolling down, limit to one step forward unless there's a big scroll delta
           newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.min(views.length - 1, currentStep + 1);
+          stepChangeReason = scrollDelta > height * 0.5 ? 'Fast scroll down' : 'Normal scroll down';
         } else {
           newStep = calculatedStep;
+          stepChangeReason = 'Direct calculation';
         }
       }
       
       // Ensure step is within bounds
-      newStep = Math.min(views.length - 1, Math.max(0, newStep));
+      const boundedStep = Math.min(views.length - 1, Math.max(0, newStep));
+      if (boundedStep !== newStep) {
+        stepChangeReason += ' (bounded)';
+      }
+      newStep = boundedStep;
+      
+      debugInfo.stepChangeReason = stepChangeReason;
       
       // Update step if changed
       if (newStep !== currentStep) {
+        console.log(`Step change: ${currentStep} -> ${newStep} (${stepChangeReason})`);
         currentStep = newStep;
-        updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+        debugInfo.currentStep = currentStep;
+        
+        // Safety check before updating viewBox
+        if (window.innerWidth && window.innerHeight) {
+          updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+        } else {
+          console.warn('Missing window dimensions during step change');
+        }
       }
       
       // Info panel visibility logic
       const lastStepThreshold = views.length * height; // Start of the extra viewport
       const newShowInfoPanel = scrollY < lastStepThreshold;
       showInfoPanel = newShowInfoPanel;
+      debugInfo.showInfoPanel = newShowInfoPanel;
       
     } else {
       // We've scrolled past the scrollytelling section
       isScrollytellingActive = false;
       showInfoPanel = false;
+      debugInfo.isScrollytellingActive = false;
+      debugInfo.showInfoPanel = false;
     }
   }
   
@@ -296,7 +387,9 @@
   function onResize() {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-      updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+      if (window.innerWidth && window.innerHeight) {
+        updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+      }
     }, 100); // Debounce resize events
   }
   
@@ -371,7 +464,9 @@
     window.addEventListener('resize', onResize, { passive: true });
   
     // Initial update
-    updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+    if (window.innerWidth && window.innerHeight) {
+      updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+    }
     
     // Monitor when DOM is fully loaded
     if (document.readyState === 'loading') {
@@ -403,6 +498,7 @@
     // Ensure currentStep is within bounds before updating
     const safeStep = Math.min(views.length - 1, Math.max(0, currentStep));
     if (safeStep !== currentStep) {
+      console.warn(`Step out of bounds: ${currentStep} -> ${safeStep}`);
       currentStep = safeStep;
     }
     
@@ -641,6 +737,38 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
+<!-- Debug Panel - Only visible on mobile for testing -->
+{#if browser && innerWidth <= 768}
+<div class="debug-panel" style="
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 10px;
+  font-size: 11px;
+  font-family: monospace;
+  z-index: 9999;
+  border-radius: 5px;
+  max-height: 40vh;
+  overflow-y: auto;
+  line-height: 1.2;
+">
+  <div style="color: {debugInfo.freezeDetected ? '#ff4444' : '#44ff44'};">
+    <strong>Step:</strong> {debugInfo.currentStep} ({views[debugInfo.currentStep]?.name || 'Unknown'}) 
+    {#if debugInfo.freezeDetected}<span style="color: #ff4444;">[FREEZE DETECTED!]</span>{/if}
+  </div>
+  <div><strong>Scroll:</strong> {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta})</div>
+  <div><strong>Raw/Calc Step:</strong> {debugInfo.rawStep} / {debugInfo.calculatedStep}</div>
+  <div><strong>Reason:</strong> {debugInfo.stepChangeReason}</div>
+  <div><strong>Active/Panel:</strong> {debugInfo.isScrollytellingActive} / {debugInfo.showInfoPanel}</div>
+  <div><strong>Dimensions:</strong> {debugInfo.windowDimensions}</div>
+  <div><strong>ViewBox:</strong> {debugInfo.viewBoxString}</div>
+  <div style="font-size: 10px; color: #aaa;">{debugInfo.viewBoxBounds}</div>
+  <div style="font-size: 10px; color: #aaa;"><strong>Last Update:</strong> {debugInfo.lastUpdateTime.toFixed(0)}ms</div>
+</div>
+{/if}
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
