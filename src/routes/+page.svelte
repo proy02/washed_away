@@ -479,11 +479,10 @@
     background: white;
     overflow: hidden;
     opacity: 1;
-    transition: opacity 0.5s ease-out, transform 0.3s ease-out;
+    transition: opacity 0.5s ease-out;
     z-index: 10;
   }
 
-  /* Hide the SVG wrapper when scrollytelling is not active */
   .svg-wrapper.hidden {
     opacity: 0;
     pointer-events: none;
@@ -506,15 +505,13 @@
     pointer-events: auto;
   }
 
-  /* Each section fills the viewport to create scroll */
   section {
     height: 100vh;
   }
 
-  /* Info Panel Styles */
   .info-panel {
     position: fixed;
-    top: 70%;
+    top: 45%;
     left: 20px;
     transform: translateY(-50%);
     background: rgba(255, 255, 255, 0.95);
@@ -554,7 +551,6 @@
     color: #4a4a4a;
   }
 
-  /* Text content section that appears after scrollytelling */
   .text-content {
     position: relative;
     background: white;
@@ -592,12 +588,46 @@
     color: #4a4a4a;
   }
 
+  /* MOBILE DEBUG PANEL - ENHANCED VISIBILITY */
+  .mobile-debug {
+    position: fixed !important;
+    top: 0px !important;
+    left: 0px !important;
+    right: 0px !important;
+    background: rgba(255, 0, 0, 0.9) !important;
+    color: white !important;
+    padding: 15px !important;
+    font-size: 12px !important;
+    font-family: monospace !important;
+    border-radius: 0 !important;
+    z-index: 99999 !important;
+    line-height: 1.4 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 3px solid yellow !important;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8) !important;
+  }
+
+  .mobile-debug .debug-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .mobile-debug .debug-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+
+  .mobile-debug .debug-item.changed {
+    background: rgba(255, 255, 0, 0.3);
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
   /* Mobile Responsive */
   @media (max-width: 768px) {
-    .svg-wrapper {
-      transform: translateY(150px);
-    }
-
     .info-panel {
       left: 16px;
       right: 16px;
@@ -605,16 +635,16 @@
       width: auto;
       padding: 20px;
       top: auto;
-      bottom: 20px;
+      bottom: 80px; /* Move higher to avoid debug panel */
       transform: none;
       border-radius: 16px;
       backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px); /* iOS Safari support */
+      -webkit-backdrop-filter: blur(15px);
     }
 
     .info-panel.visible {
       transform: none;
-      opacity: 0.9; /* Slightly more opaque on mobile */
+      opacity: 0.9;
     }
 
     .info-panel h2 {
@@ -645,12 +675,11 @@
     }
   }
 
-  /* Very small mobile */
   @media (max-width: 480px) {
     .info-panel {
       left: 12px;
       right: 12px;
-      bottom: 16px;
+      bottom: 70px;
       padding: 16px;
     }
 
@@ -686,7 +715,6 @@
     opacity: 1;
   }
 
-  /* Fix for iOS Safari scrolling issues */
   @supports (-webkit-touch-callout: none) {
     .svg-wrapper {
       -webkit-transform: translate3d(0, 0, 0);
@@ -702,8 +730,8 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<!-- MOBILE DEBUG PANEL - Only shows on mobile devices -->
-{#if browser && isMobile}
+<!-- MOBILE DEBUG PANEL - ALWAYS SHOW FOR TESTING -->
+{#if browser}
 <div class="mobile-debug">
   <div><strong>🔍 MOBILE SCROLL DEBUG</strong></div>
   <div class="debug-grid">
@@ -751,14 +779,6 @@
   <div style="margin-top: 8px; font-size: 10px; opacity: 0.8;">
     Total: {debugInfo.totalHeight} | Last: {debugInfo.lastScrollY}
   </div>
-</div>
-{/if}
-
-<!--Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
-{#if showInfoPanel && views[currentStep]?.info}
-<div class="info-panel" class:visible={views[currentStep].info}>
-  <h2>{views[currentStep].info.title}</h2>
-  <p>{@html views[currentStep].info.content}</p>
 </div>
 {/if}
 
