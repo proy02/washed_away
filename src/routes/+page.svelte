@@ -642,21 +642,6 @@
       -webkit-backdrop-filter: blur(15px);
     }
 
-    .info-panel.visible {
-      transform: none;
-      opacity: 0.9;
-    }
-
-    .info-panel h2 {
-      font-size: 20px;
-      margin-bottom: 12px;
-    }
-
-    .info-panel p {
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
     .text-content {
       padding: 60px 16px;
     }
