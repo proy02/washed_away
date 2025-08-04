@@ -1,6 +1,6 @@
 # Washed Away!
 
-A responsive, mobile-first scrollytelling story built on Svelte. Check the live demo here - [Washed Away](https://proy02.github.io/washed_away/)(https://proy02.github.io/washed_away/)
+A responsive, mobile-first scrollytelling story built on Svelte. Check the live demo here – [Washed Away](https://proy02.github.io/washed_away/)
 
 
 ## How to run the project
