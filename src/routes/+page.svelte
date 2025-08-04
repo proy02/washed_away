@@ -7,97 +7,6 @@
   let innerWidth;
   let innerHeight;
   
-  // Comprehensive debug system for mobile
-  let debugInfo = {
-    // Scroll tracking
-    scrollY: 0,
-    scrollDirection: 'none',
-    scrollDelta: 0,
-    scrollSpeed: 0,
-    lastScrollTime: 0,
-    scrollEventCount: 0,
-    
-    // Step tracking
-    currentStep: 0,
-    calculatedStep: 0,
-    rawStep: 0,
-    stepChangeReason: '',
-    stepHistory: [],
-    
-    // ViewBox tracking
-    viewBoxString: '',
-    viewBoxHistory: [],
-    viewBoxChangeCount: 0,
-    lastViewBoxUpdate: 0,
-    
-    // Animation tracking
-    animationState: 'idle',
-    tweenInProgress: false,
-    animationStartTime: 0,
-    animationDuration: 0,
-    
-    // Performance tracking
-    frameDrops: 0,
-    lastFrameTime: 0,
-    avgFrameTime: 0,
-    
-    // Error tracking
-    errors: [],
-    warnings: [],
-    
-    // Device info
-    userAgent: '',
-    isIOS: false,
-    isSafari: false,
-    devicePixelRatio: 1,
-    
-    // Memory/Resource tracking
-    memoryUsage: 0,
-    
-    // Touch/Interaction tracking
-    touchActive: false,
-    lastTouchTime: 0,
-    
-    // State flags
-    isScrollytellingActive: true,
-    showInfoPanel: true,
-    
-    // Critical flags
-    freezeDetected: false,
-    linkBroken: false,
-    transitionStuck: false
-  };
-  
-  // Track performance and detect frame drops
-  let lastPerformanceCheck = 0;
-  function trackPerformance() {
-    const now = performance.now();
-    if (lastPerformanceCheck > 0) {
-      const frameTime = now - lastPerformanceCheck;
-      if (frameTime > 33) { // More than 33ms = frame drop (below 30fps)
-        debugInfo.frameDrops++;
-      }
-      debugInfo.avgFrameTime = (debugInfo.avgFrameTime * 0.9) + (frameTime * 0.1);
-    }
-    lastPerformanceCheck = now;
-    debugInfo.lastFrameTime = now;
-  }
-  
-  // Detect device and browser
-  function detectDevice() {
-    if (browser) {
-      debugInfo.userAgent = navigator.userAgent;
-      debugInfo.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      debugInfo.isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
-      debugInfo.devicePixelRatio = window.devicePixelRatio || 1;
-      
-      // Memory usage (if available)
-      if (performance.memory) {
-        debugInfo.memoryUsage = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
-      }
-    }
-  }
-  
   //lazy loading
   let highResImage;
   let isHighResLoaded = false;
@@ -111,7 +20,7 @@
         highResImage.style.opacity = '1';
         isHighResLoaded = true;
       } catch (error) {
-        debugInfo.errors.push(`Progressive loading error: ${error.message}`);
+        console.warn('Progressive loading error:', error);
       }
     }, 1000);
   }
@@ -208,8 +117,11 @@
   let showInfoPanel = true;
   let lastScrollDirection = 'down';
   
-  // Reduce duration for smoother mobile transitions
-  const DURATION = innerWidth <= 768 ? 800 : 1000;
+  // Shorter duration for mobile
+  const DURATION = 800;
+  
+  // Track current viewBox manually (instead of using .get())
+  let currentViewBox = views[0].viewBox;
   
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
     try {
@@ -271,7 +183,7 @@
       return result;
       
     } catch (error) {
-      debugInfo.errors.push(`getResponsiveViewBox error: ${error.message}`);
+      console.error('getResponsiveViewBox error:', error);
       return [0, 0, 6000, 6750]; // Safe fallback
     }
   }
@@ -298,23 +210,22 @@
         result = [x, newY, width, adjustedHeight];
       }
       
-      // Safety checks with detailed logging
-      if (result[0] < -2000 || result[1] < -2000 || result[2] > 50000 || result[3] > 50000) {
-        debugInfo.warnings.push(`Extreme viewBox: [${result.map(v => v.toFixed(1)).join(', ')}]`);
+      // Safety checks - prevent extreme values
+      if (result[0] < -3000 || result[1] < -3000 || result[2] > 50000 || result[3] > 50000) {
+        console.warn('Extreme viewBox values, using fallback');
         return [0, 0, 6000, 6750];
       }
       
       // Check for invalid values
       if (result.some(v => !isFinite(v) || isNaN(v))) {
-        debugInfo.errors.push(`Invalid viewBox result: [${result.join(', ')}]`);
-        debugInfo.linkBroken = true;
+        console.error('Invalid viewBox result:', result);
         return [0, 0, 6000, 6750];
       }
       
       return result;
       
     } catch (error) {
-      debugInfo.errors.push(`adjustForAspectRatio error: ${error.message}`);
+      console.error('adjustForAspectRatio error:', error);
       return [0, 0, 6000, 6750];
     }
   }
@@ -328,220 +239,117 @@
   
   viewBoxStore.subscribe(value => {
     try {
-      trackPerformance();
-      
       // Check for invalid values in the animation
       if (value.some(v => !isFinite(v) || isNaN(v))) {
-        debugInfo.errors.push(`Invalid viewBox in tween: [${value.join(', ')}]`);
-        debugInfo.linkBroken = true;
+        console.error('Invalid viewBox in tween:', value);
         return;
       }
       
+      // Update current viewBox tracking
+      currentViewBox = [...value];
       viewBoxString = value.map(v => v.toFixed(2)).join(' ');
-      debugInfo.viewBoxString = viewBoxString;
-      debugInfo.viewBoxChangeCount++;
-      debugInfo.lastViewBoxUpdate = performance.now();
-      
-      // Track viewBox history
-      debugInfo.viewBoxHistory.push({
-        time: performance.now(),
-        step: currentStep,
-        viewBox: viewBoxString,
-        values: value.map(v => v.toFixed(1))
-      });
-      
-      // Keep only last 8 entries
-      if (debugInfo.viewBoxHistory.length > 8) {
-        debugInfo.viewBoxHistory.shift();
-      }
-      
-      // Detect if transition is stuck
-      if (debugInfo.viewBoxHistory.length >= 3) {
-        const recent = debugInfo.viewBoxHistory.slice(-3);
-        const allSame = recent.every(entry => entry.viewBox === recent[0].viewBox);
-        if (allSame && debugInfo.tweenInProgress) {
-          debugInfo.transitionStuck = true;
-          debugInfo.warnings.push('Transition appears stuck');
-        }
-      }
       
     } catch (error) {
-      debugInfo.errors.push(`ViewBox subscription error: ${error.message}`);
-      debugInfo.linkBroken = true;
+      console.error('ViewBox subscription error:', error);
     }
   });
   
   function updateViewBox(step, width, height) {
     try {
-      const now = performance.now();
-      debugInfo.animationStartTime = now;
-      debugInfo.tweenInProgress = true;
-      debugInfo.animationState = 'updating';
-      
       // Safety checks
       if (!width || !height || width <= 0 || height <= 0) {
-        debugInfo.warnings.push(`Invalid dimensions: ${width}x${height}`);
+        console.warn('Invalid dimensions:', { width, height });
         return;
       }
       
       if (step < 0 || step >= views.length) {
-        debugInfo.errors.push(`Invalid step: ${step} (max: ${views.length - 1})`);
+        console.warn('Invalid step:', step);
         return;
       }
       
       const originalViewBox = views[step].viewBox;
       const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
       
-      // Check for dramatic changes that might cause issues
-      const currentVB = viewBoxStore.get();
+      // Check for dramatic changes that might cause issues - using tracked currentViewBox
       const maxChange = Math.max(
-        Math.abs(responsiveViewBox[0] - currentVB[0]),
-        Math.abs(responsiveViewBox[1] - currentVB[1]),
-        Math.abs(responsiveViewBox[2] - currentVB[2]),
-        Math.abs(responsiveViewBox[3] - currentVB[3])
+        Math.abs(responsiveViewBox[0] - currentViewBox[0]),
+        Math.abs(responsiveViewBox[1] - currentViewBox[1]),
+        Math.abs(responsiveViewBox[2] - currentViewBox[2]),
+        Math.abs(responsiveViewBox[3] - currentViewBox[3])
       );
       
       if (maxChange > 8000) {
-        debugInfo.warnings.push(`Large viewBox jump: ${maxChange.toFixed(0)} units`);
+        console.warn('Large viewBox change:', maxChange.toFixed(0), 'units');
       }
       
       viewBoxStore.set(responsiveViewBox);
       
-      // Clear stuck flag after successful update
-      setTimeout(() => {
-        debugInfo.tweenInProgress = false;
-        debugInfo.transitionStuck = false;
-      }, DURATION + 100);
-      
     } catch (error) {
-      debugInfo.errors.push(`updateViewBox error: ${error.message}`);
-      debugInfo.linkBroken = true;
+      console.error('updateViewBox error:', error);
     }
   }
   
   function onScroll() {
     try {
-      const now = performance.now();
       const scrollY = window.scrollY;
       const height = window.innerHeight;
       const totalScrollytellingHeight = (views.length + 1) * height;
       
-      // Track scroll performance
-      debugInfo.scrollEventCount++;
-      const timeSinceLastScroll = now - debugInfo.lastScrollTime;
-      debugInfo.scrollSpeed = timeSinceLastScroll > 0 ? Math.abs(scrollY - debugInfo.scrollY) / timeSinceLastScroll : 0;
-      debugInfo.lastScrollTime = now;
-      
       // Determine scroll direction
-      const lastScrollY = debugInfo.scrollY;
+      const lastScrollY = window.lastScrollY || 0;
       const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
       const scrollDelta = Math.abs(scrollY - lastScrollY);
       
-      // Update debug info
-      debugInfo.scrollY = scrollY;
-      debugInfo.scrollDirection = scrollDirection;
-      debugInfo.scrollDelta = scrollDelta;
+      window.lastScrollY = scrollY;
       lastScrollDirection = scrollDirection;
       
       if (scrollY < totalScrollytellingHeight) {
         // We're in the scrollytelling section
         const wasScrollytellingActive = isScrollytellingActive;
         isScrollytellingActive = true;
-        debugInfo.isScrollytellingActive = true;
         
         // Calculate the step based on scroll position
         const rawStep = Math.floor(scrollY / height);
         const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
         
-        debugInfo.rawStep = rawStep;
-        debugInfo.calculatedStep = calculatedStep;
-        
-        // Step changing logic
+        // Step changing logic - simplified
         let newStep;
-        let stepChangeReason = '';
         
         if (!wasScrollytellingActive && scrollDirection === 'up') {
           newStep = calculatedStep;
-          stepChangeReason = 'Return from end';
         } else {
           if (scrollDirection === 'up' && calculatedStep < currentStep - 1) {
             newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.max(0, currentStep - 1);
-            stepChangeReason = scrollDelta > height * 0.5 ? 'Fast up' : 'Normal up';
           } else if (scrollDirection === 'down' && calculatedStep > currentStep + 1) {
             newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.min(views.length - 1, currentStep + 1);
-            stepChangeReason = scrollDelta > height * 0.5 ? 'Fast down' : 'Normal down';
           } else {
             newStep = calculatedStep;
-            stepChangeReason = 'Direct';
           }
         }
         
         newStep = Math.min(views.length - 1, Math.max(0, newStep));
-        debugInfo.stepChangeReason = stepChangeReason;
         
         // Update step if changed
         if (newStep !== currentStep) {
-          // Track step history
-          debugInfo.stepHistory.push({
-            from: currentStep,
-            to: newStep,
-            reason: stepChangeReason,
-            time: now,
-            scrollY: scrollY
-          });
-          
-          // Keep only last 10 step changes
-          if (debugInfo.stepHistory.length > 10) {
-            debugInfo.stepHistory.shift();
-          }
-          
           currentStep = newStep;
-          debugInfo.currentStep = currentStep;
-          
-          // Critical transition detection
-          if ((currentStep === 0 && newStep === 1) || (currentStep === 1 && newStep === 0)) {
-            debugInfo.warnings.push(`CRITICAL: ${currentStep}→${newStep} at ${now.toFixed(0)}ms`);
-          }
           
           if (window.innerWidth && window.innerHeight) {
             updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-          } else {
-            debugInfo.errors.push('Missing dimensions during step change');
           }
         }
         
         const lastStepThreshold = views.length * height;
         const newShowInfoPanel = scrollY < lastStepThreshold;
         showInfoPanel = newShowInfoPanel;
-        debugInfo.showInfoPanel = newShowInfoPanel;
         
       } else {
         isScrollytellingActive = false;
         showInfoPanel = false;
-        debugInfo.isScrollytellingActive = false;
-        debugInfo.showInfoPanel = false;
-      }
-      
-      // Detect potential freeze (no scroll events for too long while scrolling)
-      if (timeSinceLastScroll > 100 && scrollDelta > 0) {
-        debugInfo.freezeDetected = true;
-        debugInfo.errors.push(`Potential freeze detected: ${timeSinceLastScroll}ms gap`);
       }
       
     } catch (error) {
-      debugInfo.errors.push(`onScroll error: ${error.message}`);
-      debugInfo.linkBroken = true;
+      console.error('onScroll error:', error);
     }
-  }
-  
-  // Touch event tracking
-  function onTouchStart() {
-    debugInfo.touchActive = true;
-    debugInfo.lastTouchTime = performance.now();
-  }
-  
-  function onTouchEnd() {
-    debugInfo.touchActive = false;
   }
   
   let resizeTimeout;
@@ -557,43 +365,28 @@
   onMount(() => {
     if (!browser) return;
     
-    detectDevice();
     setupProgressiveLoading();
     
-    // Event listeners
+    // Event listeners with better mobile support
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchend', onTouchEnd, { passive: true });
   
     // Initial update
     if (window.innerWidth && window.innerHeight) {
       updateViewBox(currentStep, window.innerWidth, window.innerHeight);
     }
     
-    // Regular performance monitoring
-    const perfInterval = setInterval(() => {
-      trackPerformance();
-      if (performance.memory) {
-        debugInfo.memoryUsage = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
-      }
-    }, 500);
-    
     return () => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchend', onTouchEnd);
       clearTimeout(resizeTimeout);
-      clearInterval(perfInterval);
     };
   });
   
-  // Reactive statement with enhanced error handling
+  // Reactive statement with bounds checking
   $: if (browser && innerWidth && innerHeight) {
     const safeStep = Math.min(views.length - 1, Math.max(0, currentStep));
     if (safeStep !== currentStep) {
-      debugInfo.warnings.push(`Step bounds correction: ${currentStep} → ${safeStep}`);
       currentStep = safeStep;
     }
     
@@ -729,7 +522,7 @@
   /* Mobile Responsive */
   @media (max-width: 768px) {
     .svg-wrapper {
-      transform: translateY(-150px);
+      transform: translateY(150px);
     }
 
     .info-panel {
@@ -835,112 +628,6 @@
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
-
-<!-- Mobile Debug Panel - Comprehensive -->
-{#if browser && innerWidth <= 768}
-<div style="
-  position: fixed;
-  top: 5px;
-  left: 5px;
-  right: 5px;
-  background: rgba(0,0,0,0.95);
-  color: white;
-  padding: 8px;
-  font-size: 9px;
-  font-family: monospace;
-  z-index: 99999;
-  border-radius: 4px;
-  max-height: 60vh;
-  overflow-y: auto;
-  line-height: 1.1;
-  border: 2px solid {debugInfo.freezeDetected || debugInfo.linkBroken ? '#ff0000' : debugInfo.transitionStuck ? '#ffaa00' : '#00ff00'};
-">
-  <!-- Critical Status -->
-  <div style="font-weight: bold; color: {debugInfo.freezeDetected || debugInfo.linkBroken ? '#ff4444' : debugInfo.transitionStuck ? '#ffaa44' : '#44ff44'};">
-    STATUS: {debugInfo.freezeDetected ? 'FROZEN' : debugInfo.linkBroken ? 'LINK BROKEN' : debugInfo.transitionStuck ? 'STUCK' : 'OK'}
-    {#if debugInfo.tweenInProgress}<span style="color: #ffff44;"> [ANIMATING]</span>{/if}
-  </div>
-  
-  <!-- Device Info -->
-  <div style="color: #aaf;">
-    <strong>Device:</strong> {debugInfo.isIOS ? 'iOS' : 'Android'} {debugInfo.isSafari ? 'Safari' : 'Other'} | DPR: {debugInfo.devicePixelRatio}
-  </div>
-  
-  <!-- Step & Scroll Info -->
-  <div>
-    <strong>Step:</strong> {debugInfo.currentStep} ({views[debugInfo.currentStep]?.name}) | Raw: {debugInfo.rawStep} | Calc: {debugInfo.calculatedStep}
-  </div>
-  <div>
-    <strong>Scroll:</strong> {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta}) | Speed: {debugInfo.scrollSpeed.toFixed(1)}
-  </div>
-  <div>
-    <strong>Reason:</strong> {debugInfo.stepChangeReason} | Touch: {debugInfo.touchActive ? 'YES' : 'NO'}
-  </div>
-  
-  <!-- ViewBox Info -->
-  <div>
-    <strong>ViewBox:</strong> {debugInfo.viewBoxString}
-  </div>
-  <div style="color: #ccc;">
-    Changes: {debugInfo.viewBoxChangeCount} | Last: {(performance.now() - debugInfo.lastViewBoxUpdate).toFixed(0)}ms ago
-  </div>
-  
-  <!-- Performance -->
-  <div style="color: {debugInfo.frameDrops > 5 ? '#ff6666' : '#66ff66'};">
-    <strong>Performance:</strong> {debugInfo.avgFrameTime.toFixed(1)}ms avg | Drops: {debugInfo.frameDrops} | Mem: {debugInfo.memoryUsage}MB
-  </div>
-  
-  <!-- Step History -->
-  {#if debugInfo.stepHistory.length > 0}
-  <div style="margin-top: 4px; border-top: 1px solid #333; padding-top: 2px;">
-    <strong style="color: #88ccff;">Step History:</strong>
-    {#each debugInfo.stepHistory.slice(-3) as change}
-      <div style="font-size: 8px; color: {change.from === 0 && change.to === 1 || change.from === 1 && change.to === 0 ? '#ff6666' : '#cccccc'};">
-        {change.from}→{change.to} ({change.reason}) @{change.scrollY}px
-      </div>
-    {/each}
-  </div>
-  {/if}
-  
-  <!-- ViewBox History -->
-  {#if debugInfo.viewBoxHistory.length > 0}
-  <div style="margin-top: 4px; border-top: 1px solid #333; padding-top: 2px;">
-    <strong style="color: #88ccff;">ViewBox History:</strong>
-    {#each debugInfo.viewBoxHistory.slice(-2) as entry}
-      <div style="font-size: 8px; color: #ccc;">
-        Step {entry.step}: [{entry.values.join(', ')}]
-      </div>
-    {/each}
-  </div>
-  {/if}
-  
-  <!-- Errors & Warnings -->
-  {#if debugInfo.errors.length > 0 || debugInfo.warnings.length > 0}
-  <div style="margin-top: 4px; border-top: 1px solid #333; padding-top: 2px;">
-    {#if debugInfo.errors.length > 0}
-      <div style="color: #ff6666;"><strong>ERRORS:</strong></div>
-      {#each debugInfo.errors.slice(-3) as error}
-        <div style="font-size: 8px; color: #ff9999;">{error}</div>
-      {/each}
-    {/if}
-    {#if debugInfo.warnings.length > 0}
-      <div style="color: #ffaa66;"><strong>WARNINGS:</strong></div>
-      {#each debugInfo.warnings.slice(-3) as warning}
-        <div style="font-size: 8px; color: #ffcc99;">{warning}</div>
-      {/each}
-    {/if}
-  </div>
-  {/if}
-  
-  <!-- Event Stats -->
-  <div style="margin-top: 4px; border-top: 1px solid #333; padding-top: 2px; font-size: 8px; color: #999;">
-    Events: {debugInfo.scrollEventCount} | Active: {debugInfo.isScrollytellingActive} | Panel: {debugInfo.showInfoPanel}
-  </div>
-</div>
-{/if}
-
-<!-- Your existing template structure goes here -->
-<!-- Keep your SVG wrapper and other elements unchanged -->
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
