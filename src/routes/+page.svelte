@@ -676,22 +676,7 @@
   }
 
   @media (max-width: 480px) {
-    .info-panel {
-      left: 12px;
-      right: 12px;
-      bottom: 70px;
-      padding: 16px;
-    }
-
-    .info-panel h2 {
-      font-size: 18px;
-      margin-bottom: 10px;
-    }
-
-    .info-panel p {
-      font-size: 13px;
-    }
-
+    
     .text-content {
       padding: 40px 12px;
     }
