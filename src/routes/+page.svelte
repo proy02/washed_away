@@ -470,7 +470,6 @@
   
 </script>
 
-
 <style>
   .svg-wrapper {
     position: fixed;
@@ -704,39 +703,6 @@
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
-
-<!-- Debug Panel - Only visible on mobile for testing -->
-{#if browser && innerWidth <= 768}
-<div class="debug-panel" style="
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  right: 10px;
-  background: rgba(0,0,0,0.8);
-  color: white;
-  padding: 10px;
-  font-size: 11px;
-  font-family: monospace;
-  z-index: 9999;
-  border-radius: 5px;
-  max-height: 40vh;
-  overflow-y: auto;
-  line-height: 1.2;
-">
-  <div style="color: {debugInfo.freezeDetected ? '#ff4444' : '#44ff44'};">
-    <strong>Step:</strong> {debugInfo.currentStep} ({views[debugInfo.currentStep]?.name || 'Unknown'}) 
-    {#if debugInfo.freezeDetected}<span style="color: #ff4444;">[FREEZE DETECTED!]</span>{/if}
-  </div>
-  <div><strong>Scroll:</strong> {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta})</div>
-  <div><strong>Raw/Calc Step:</strong> {debugInfo.rawStep} / {debugInfo.calculatedStep}</div>
-  <div><strong>Reason:</strong> {debugInfo.stepChangeReason}</div>
-  <div><strong>Active/Panel:</strong> {debugInfo.isScrollytellingActive} / {debugInfo.showInfoPanel}</div>
-  <div><strong>Dimensions:</strong> {debugInfo.windowDimensions}</div>
-  <div><strong>ViewBox:</strong> {debugInfo.viewBoxString}</div>
-  <div style="font-size: 10px; color: #aaa;">{debugInfo.viewBoxBounds}</div>
-  <div style="font-size: 10px; color: #aaa;"><strong>Last Update:</strong> {debugInfo.lastUpdateTime.toFixed(0)}ms</div>
-</div>
-{/if}
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
