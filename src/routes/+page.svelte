@@ -650,7 +650,7 @@
        class="placeholder-image"/>
 
       <image width="6000" height="6750" 
-        xlink:href="large_image_ultra_10.webp" 
+        xlink:href="large_image_cropped_ultra_10.webp" 
         class="high-res-image" 
         style="opacity: 0;"
         bind:this={highResImage}/>
@@ -853,7 +853,7 @@
   <section style="height: 100vh;"></section>
 {/each}
 
-Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive
+<!--Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
 {#if showInfoPanel && views[currentStep]?.info}
 <div class="info-panel" class:visible={views[currentStep].info}>
   <h2>{views[currentStep].info.title}</h2>
