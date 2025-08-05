@@ -7,6 +7,33 @@
   let innerWidth;
   let innerHeight;
   
+  // === DEBUG VARIABLES (ONLY ADDITION) ===
+  let debugInfo = {
+    scrollY: 0,
+    currentStep: 0,
+    calculatedStep: 0,
+    rawStep: 0,
+    scrollDirection: 'none',
+    scrollDelta: 0,
+    isScrollytellingActive: false,
+    lastUpdateTime: 0,
+    updateFrequency: 0,
+    scrollEventCount: 0,
+    performanceIssues: 0
+  };
+  
+  let debugLogs = [];
+  let showDebugPanel = true;
+  let frameCount = 0;
+  let lastFrameTime = performance.now();
+  
+  function addDebugLog(message, type = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    debugLogs = [...debugLogs.slice(-15), { timestamp, message, type, id: Date.now() }];
+    console.log(`[${timestamp}] ${message}`);
+  }
+  // === END DEBUG ADDITIONS ===
+  
   //lazy loading
   let highResImage;
   let isHighResLoaded = false;
@@ -127,6 +154,10 @@
   const DURATION = 1000;
   
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
+    // === DEBUG: Performance monitoring ===
+    const startTime = performance.now();
+    // === END DEBUG ===
+    
     const [x, y, width, height] = viewBoxArray;
     
     // Determine screen category
@@ -149,6 +180,17 @@
       const adjustedX = x + adjustments.offsetX;
       const adjustedY = y + adjustments.offsetY;
       const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
+      
+      // === DEBUG: Log slow calculations ===
+      const endTime = performance.now();
+      const executionTime = endTime - startTime;
+      if (executionTime > 5) {
+        addDebugLog(`SLOW getResponsiveViewBox: ${executionTime.toFixed(2)}ms`, 'warning');
+        debugInfo.performanceIssues++;
+      }
+      debugInfo.lastUpdateTime = executionTime;
+      // === END DEBUG ===
+      
       return result;
     }
     
@@ -181,6 +223,16 @@
     
     // Now adjust for aspect ratio
     const result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
+    
+    // === DEBUG: Log slow calculations ===
+    const endTime = performance.now();
+    const executionTime = endTime - startTime;
+    if (executionTime > 5) {
+      addDebugLog(`SLOW getResponsiveViewBox: ${executionTime.toFixed(2)}ms`, 'warning');
+      debugInfo.performanceIssues++;
+    }
+    debugInfo.lastUpdateTime = executionTime;
+    // === END DEBUG ===
     
     return result;
   }
@@ -221,12 +273,27 @@
   });
   
   function updateViewBox(step, width, height) {
+    // === DEBUG: Log all updateViewBox calls ===
+    addDebugLog(`updateViewBox: step=${step} (${views[step].name})`, 'info');
+    // === END DEBUG ===
+    
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
     viewBoxStore.set(responsiveViewBox);
   }
   
   function onScroll() {
+    // === DEBUG: Track scroll performance ===
+    const currentTime = performance.now();
+    debugInfo.scrollEventCount++;
+    
+    // Track high frequency scrolling
+    const timeSinceLastFrame = currentTime - lastFrameTime;
+    if (timeSinceLastFrame < 16) { // Less than 60fps
+      addDebugLog(`HIGH FREQUENCY SCROLL: ${timeSinceLastFrame.toFixed(2)}ms gap`, 'warning');
+    }
+    // === END DEBUG ===
+    
     const scrollY = window.scrollY;
     const height = window.innerHeight;
     const totalScrollytellingHeight = (views.length + 1) * height;
@@ -240,14 +307,27 @@
     window.lastScrollY = scrollY;
     lastScrollDirection = scrollDirection;
     
+    // === DEBUG: Update debug info ===
+    debugInfo.scrollY = scrollY;
+    debugInfo.scrollDirection = scrollDirection;
+    debugInfo.scrollDelta = scrollDelta;
+    // === END DEBUG ===
+    
     if (scrollY < totalScrollytellingHeight) {
       // We're in the scrollytelling section
       const wasScrollytellingActive = isScrollytellingActive;
       isScrollytellingActive = true;
+      debugInfo.isScrollytellingActive = true;
       
       // Calculate the step based on scroll position
       const rawStep = Math.floor(scrollY / height);
       const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
+      
+      // === DEBUG: Track step calculations ===
+      debugInfo.rawStep = rawStep;
+      debugInfo.calculatedStep = calculatedStep;
+      debugInfo.currentStep = currentStep;
+      // === END DEBUG ===
       
       // Improved step changing - allow direct step changes when scrolling up from end
       let newStep;
@@ -256,14 +336,27 @@
       if (!wasScrollytellingActive && scrollDirection === 'up') {
         // Allow jumping to the calculated step directly
         newStep = calculatedStep;
+        // === DEBUG: Log step jumping ===
+        addDebugLog(`JUMP from end: ${currentStep} → ${newStep}`, 'info');
+        // === END DEBUG ===
       } else {
         // Normal step progression - prevent excessive jumping
         if (scrollDirection === 'up' && calculatedStep < currentStep - 1) {
           // When scrolling up, limit to one step back unless there's a big scroll delta (fast scroll)
           newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.max(0, currentStep - 1);
+          // === DEBUG: Log step limiting ===
+          if (newStep !== calculatedStep) {
+            addDebugLog(`LIMIT UP: wanted ${calculatedStep}, got ${newStep} (delta: ${scrollDelta})`, 'warning');
+          }
+          // === END DEBUG ===
         } else if (scrollDirection === 'down' && calculatedStep > currentStep + 1) {
           // When scrolling down, limit to one step forward unless there's a big scroll delta
           newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.min(views.length - 1, currentStep + 1);
+          // === DEBUG: Log step limiting ===
+          if (newStep !== calculatedStep) {
+            addDebugLog(`LIMIT DOWN: wanted ${calculatedStep}, got ${newStep} (delta: ${scrollDelta})`, 'warning');
+          }
+          // === END DEBUG ===
         } else {
           newStep = calculatedStep;
         }
@@ -274,6 +367,10 @@
       
       // Update step if changed
       if (newStep !== currentStep) {
+        // === DEBUG: Log step changes ===
+        addDebugLog(`STEP CHANGE: ${currentStep} → ${newStep} (${views[newStep].name})`, 'success');
+        // === END DEBUG ===
+        
         currentStep = newStep;
         updateViewBox(currentStep, window.innerWidth, window.innerHeight);
       }
@@ -287,12 +384,25 @@
       // We've scrolled past the scrollytelling section
       isScrollytellingActive = false;
       showInfoPanel = false;
+      debugInfo.isScrollytellingActive = false;
     }
+    
+    // === DEBUG: Update frame tracking ===
+    frameCount++;
+    if (frameCount % 10 === 0) {
+      debugInfo.updateFrequency = (10000 / (currentTime - lastFrameTime)).toFixed(1);
+      lastFrameTime = currentTime;
+    }
+    // === END DEBUG ===
   }
   
   // Throttled resize handler for better mobile performance
   let resizeTimeout;
   function onResize() {
+    // === DEBUG: Log resize events ===
+    addDebugLog(`RESIZE: ${window.innerWidth}x${window.innerHeight}`, 'info');
+    // === END DEBUG ===
+    
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
       updateViewBox(currentStep, window.innerWidth, window.innerHeight);
@@ -361,6 +471,10 @@
   onMount(() => {
     if (!browser) return;
     
+    // === DEBUG: Log mount ===
+    addDebugLog('Component mounted', 'success');
+    // === END DEBUG ===
+    
     // Start monitoring the large image load
     monitorLargeImageLoad();
     setupProgressiveLoading();
@@ -406,7 +520,23 @@
     }
     
     updateViewBox(currentStep, innerWidth, innerHeight);
+    
+    // === DEBUG: Log reactive updates ===
+    addDebugLog(`REACTIVE UPDATE: ${innerWidth}x${innerHeight}`, 'info');
+    // === END DEBUG ===
   }
+  
+  // === DEBUG FUNCTIONS ===
+  function toggleDebugPanel() {
+    showDebugPanel = !showDebugPanel;
+  }
+  
+  function clearDebugLogs() {
+    debugLogs = [];
+    debugInfo.performanceIssues = 0;
+    debugInfo.scrollEventCount = 0;
+  }
+  // === END DEBUG FUNCTIONS ===
   
 </script>
 
@@ -640,6 +770,82 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
+<!-- === DEBUG PANEL (ONLY ADDITION TO HTML) === -->
+{#if showDebugPanel}
+<div style="
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  width: 300px;
+  max-height: 50vh;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 11px;
+  z-index: 10000;
+  overflow-y: auto;
+">
+  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+    <strong style="color: #4CAF50;">🐛 Debug</strong>
+    <div>
+      <button on:click={clearDebugLogs} style="background: #f44336; color: white; border: none; padding: 2px 6px; margin-right: 4px; border-radius: 2px; font-size: 9px;">Clear</button>
+      <button on:click={toggleDebugPanel} style="background: #2196F3; color: white; border: none; padding: 2px 6px; border-radius: 2px; font-size: 9px;">Hide</button>
+    </div>
+  </div>
+  
+  <div style="margin-bottom: 8px; padding: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px;">
+    <strong>Current:</strong> Step {debugInfo.currentStep} ({views[debugInfo.currentStep]?.name})<br>
+    <strong>Scroll:</strong> {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta})<br>
+    <strong>Calculated:</strong> Raw={debugInfo.rawStep}, Calc={debugInfo.calculatedStep}<br>
+    <strong>Performance:</strong> {debugInfo.lastUpdateTime.toFixed(1)}ms, {debugInfo.updateFrequency}/s<br>
+    <strong>Events:</strong> {debugInfo.scrollEventCount}, Issues: {debugInfo.performanceIssues}
+  </div>
+  
+  <div style="max-height: 150px; overflow-y: auto;">
+    <strong>Recent Logs:</strong>
+    {#each debugLogs.slice(-8).reverse() as log}
+      <div style="
+        margin: 1px 0; 
+        padding: 2px 4px; 
+        background: rgba(255, 255, 255, 0.05); 
+        border-radius: 2px;
+        border-left: 2px solid {log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : '#2196F3'};
+        font-size: 9px;
+      ">
+        <span style="color: #888;">{log.timestamp.split(':').slice(-2).join(':')}</span>
+        <span style="color: {log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : 'white'};">
+          {log.message}
+        </span>
+      </div>
+    {/each}
+  </div>
+</div>
+{/if}
+
+{#if !showDebugPanel}
+<button 
+  on:click={toggleDebugPanel}
+  style="
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 15px;
+    font-family: monospace;
+    font-size: 11px;
+    z-index: 10000;
+    cursor: pointer;
+  "
+>
+  🐛 Debug
+</button>
+{/if}
+<!-- === END DEBUG PANEL === -->
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
@@ -852,7 +1058,7 @@
   <section style="height: 100vh;"></section>
 {/each}
 
-Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive
+<!-- Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
 {#if showInfoPanel && views[currentStep]?.info}
 <div class="info-panel" class:visible={views[currentStep].info}>
   <h2>{views[currentStep].info.title}</h2>
