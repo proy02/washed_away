@@ -244,13 +244,38 @@
     viewBoxStore.set(responsiveViewBox);
   }
   
-  // === FIX #2: Throttle scroll events ===
+  // === DEBUG & FIX #2: Enhanced scroll debugging ===
   let scrollTimeout;
   let isScrolling = false;
+  let debugLogs = [];
+  let scrollEventCount = 0;
+  
+  function addDebugLog(message, type = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    debugLogs = [...debugLogs.slice(-25), { timestamp, message, type, id: Date.now() }];
+    console.log(`[${timestamp}] ${message}`);
+  }
   
   function onScroll() {
+    const startTime = performance.now();
+    scrollEventCount++;
+    
+    // === ENHANCED DEBUG FOR STEP 1→0 FREEZING ===
+    const scrollY = window.scrollY;
+    const height = window.innerHeight;
+    const rawStep = Math.floor(scrollY / height);
+    const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
+    
+    // Log critical step 1→0 transitions
+    if ((currentStep === 1 && calculatedStep === 0) || (currentStep === 0 && calculatedStep === 1)) {
+      addDebugLog(`CRITICAL TRANSITION: ${currentStep}→${calculatedStep}, scroll=${scrollY}, isScrolling=${isScrolling}`, 'warning');
+    }
+    
     // === FIX #2: Skip processing if already processing ===
-    if (isScrolling) return;
+    if (isScrolling) {
+      addDebugLog(`BLOCKED: Already processing (events: ${scrollEventCount})`, 'warning');
+      return;
+    }
     isScrolling = true;
     
     const scrollY = window.scrollY;
@@ -294,8 +319,23 @@
       
       // Update step if changed
       if (newStep !== currentStep) {
-        currentStep = newStep;
-        updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+        addDebugLog(`STEP CHANGE: ${currentStep}→${newStep} (${views[newStep].name})`, 'success');
+        
+        // === CRITICAL FIX: Check if this is the problematic 1→0 transition ===
+        if ((currentStep === 1 && newStep === 0) || (currentStep === 0 && newStep === 1)) {
+          addDebugLog(`CRITICAL STEP CHANGE DETECTED: ${currentStep}→${newStep}`, 'error');
+          
+          // Force a small delay for these critical transitions
+          setTimeout(() => {
+            currentStep = newStep;
+            updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+            addDebugLog(`DELAYED UPDATE COMPLETED: ${newStep}`, 'success');
+          }, 50);
+        } else {
+          // Normal step change
+          currentStep = newStep;
+          updateViewBox(currentStep, window.innerWidth, window.innerHeight);
+        }
       }
       
       // Info panel visibility logic
@@ -310,10 +350,17 @@
     }
     
     // === FIX #2: Reset scroll processing after a brief delay ===
+    const processingTime = performance.now() - startTime;
+    
+    // Log slow processing that could cause freezing
+    if (processingTime > 16) { // Longer than one frame (60fps)
+      addDebugLog(`SLOW PROCESSING: ${processingTime.toFixed(2)}ms for step ${currentStep}`, 'error');
+    }
+    
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
       isScrolling = false;
-    }, 10); // Allow next scroll event after 10ms
+    }, Math.max(10, processingTime * 2)); // Adaptive timeout based on processing time
   }
   
   // Throttled resize handler for better mobile performance
@@ -684,15 +731,14 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<!-- === DEBUG PANEL (ONLY ADDITION TO HTML) === -->
-<!-- {#if showDebugPanel}
+<!-- === CRITICAL DEBUG PANEL FOR STEP 1→0 ISSUE === -->
 <div style="
   position: fixed;
-  bottom: 10px;
-  left: 10px;
+  top: 10px;
+  right: 10px;
   width: 300px;
-  max-height: 50vh;
-  background: rgba(0, 0, 0, 0.9);
+  max-height: 60vh;
+  background: rgba(0, 0, 0, 0.95);
   color: white;
   padding: 10px;
   border-radius: 8px;
@@ -700,66 +746,40 @@
   font-size: 11px;
   z-index: 10000;
   overflow-y: auto;
+  border: 2px solid #f44336;
 ">
   <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-    <strong style="color: #4CAF50;">🐛 Debug</strong>
-    <div>
-      <button on:click={clearDebugLogs} style="background: #f44336; color: white; border: none; padding: 2px 6px; margin-right: 4px; border-radius: 2px; font-size: 9px;">Clear</button>
-      <button on:click={toggleDebugPanel} style="background: #2196F3; color: white; border: none; padding: 2px 6px; border-radius: 2px; font-size: 9px;">Hide</button>
-    </div>
+    <strong style="color: #f44336;">🚨 FREEZE DEBUG</strong>
+    <button onclick="location.reload()" style="background: #4CAF50; color: white; border: none; padding: 2px 6px; border-radius: 2px; font-size: 9px;">Reload</button>
   </div>
   
-  <div style="margin-bottom: 8px; padding: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px;">
-    <strong>Current:</strong> Step {debugInfo.currentStep} ({views[debugInfo.currentStep]?.name})<br>
-    <strong>Scroll:</strong> {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta})<br>
-    <strong>Calculated:</strong> Raw={debugInfo.rawStep}, Calc={debugInfo.calculatedStep}<br>
-    <strong>Performance:</strong> {debugInfo.lastUpdateTime.toFixed(1)}ms, {debugInfo.updateFrequency}/s<br>
-    <strong>Events:</strong> {debugInfo.scrollEventCount}, Issues: {debugInfo.performanceIssues}
+  <div style="margin-bottom: 8px; padding: 6px; background: rgba(244, 67, 54, 0.2); border-radius: 3px;">
+    <strong>Current:</strong> Step {currentStep} ({views[currentStep]?.name})<br>
+    <strong>Scroll Events:</strong> {scrollEventCount}<br>
+    <strong>Processing:</strong> {isScrolling ? '🔴 ACTIVE' : '🟢 FREE'}<br>
+    <strong>Direction:</strong> {lastScrollDirection}
   </div>
   
-  <div style="max-height: 150px; overflow-y: auto;">
-    <strong>Recent Logs:</strong>
-    {#each debugLogs.slice(-8).reverse() as log}
+  <div style="max-height: 250px; overflow-y: auto;">
+    <strong>Critical Logs:</strong>
+    {#each debugLogs.slice(-15).reverse() as log}
       <div style="
         margin: 1px 0; 
         padding: 2px 4px; 
-        background: rgba(255, 255, 255, 0.05); 
+        background: {log.type === 'error' ? 'rgba(244, 67, 54, 0.3)' : log.type === 'warning' ? 'rgba(255, 152, 0, 0.2)' : 'rgba(255, 255, 255, 0.05)'}; 
         border-radius: 2px;
-        border-left: 2px solid {log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : '#2196F3'};
+        border-left: 2px solid {log.type === 'error' ? '#f44336' : log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : '#2196F3'};
         font-size: 9px;
       ">
         <span style="color: #888;">{log.timestamp.split(':').slice(-2).join(':')}</span>
-        <span style="color: {log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : 'white'};">
+        <span style="color: {log.type === 'error' ? '#f44336' : log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : 'white'};">
           {log.message}
         </span>
       </div>
     {/each}
   </div>
 </div>
-{/if}
-
-{#if !showDebugPanel}
-<button 
-  on:click={toggleDebugPanel}
-  style="
-    position: fixed;
-    bottom: 10px;
-    left: 10px;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 15px;
-    font-family: monospace;
-    font-size: 11px;
-    z-index: 10000;
-    cursor: pointer;
-  "
->
-  🐛 Debug
-</button>
-{/if} -->
-<!-- === END DEBUG PANEL === -->
+<!-- === END CRITICAL DEBUG === -->
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
