@@ -7,6 +7,57 @@
   let innerWidth;
   let innerHeight;
   
+  // === COMPREHENSIVE DEBUG TRACKING ===
+  let debugInfo = {
+    scrollY: 0,
+    currentStep: 0,
+    calculatedStep: 0,
+    scrollDirection: 'none',
+    scrollDelta: 0,
+    eventCount: 0,
+    freezeDetected: false,
+    lastProcessTime: 0,
+    tweenedActive: false,
+    mainThreadBlocked: false
+  };
+  
+  let debugLogs = [];
+  let performanceMetrics = {
+    getResponsiveViewBoxTime: 0,
+    updateViewBoxTime: 0,
+    tweenedSetTime: 0,
+    totalScrollEventTime: 0
+  };
+  
+  function addDebugLog(message, type = 'info', timing = null) {
+    const timestamp = new Date().toLocaleTimeString();
+    const entry = { 
+      timestamp, 
+      message: timing ? `${message} (${timing.toFixed(2)}ms)` : message, 
+      type, 
+      id: Date.now() 
+    };
+    debugLogs = [...debugLogs.slice(-20), entry];
+    console.log(`[${timestamp}] ${entry.message}`);
+  }
+  
+  // Track main thread blocking
+  let lastFrameTime = performance.now();
+  function trackMainThreadBlocking() {
+    const now = performance.now();
+    const frameDelta = now - lastFrameTime;
+    
+    if (frameDelta > 32) { // More than 2 frames at 60fps
+      debugInfo.mainThreadBlocked = true;
+      addDebugLog(`MAIN THREAD BLOCKED: ${frameDelta.toFixed(2)}ms gap`, 'error');
+    } else {
+      debugInfo.mainThreadBlocked = false;
+    }
+    
+    lastFrameTime = now;
+    if (browser) requestAnimationFrame(trackMainThreadBlocking);
+  }
+  
   //lazy loading
   let highResImage;
   let isHighResLoaded = false;
@@ -126,79 +177,75 @@
   
   const DURATION = 1000;
   
-  // === FIX #1: Cache responsive viewBox calculations ===
-  let responsiveViewBoxCache = new Map();
-  let lastScreenCategory = '';
-  
-  function getScreenCategory(windowWidth) {
-    if (windowWidth <= 480) return 'mobile';
-    if (windowWidth <= 768) return 'mobile';  
-    if (windowWidth <= 1024) return 'tablet';
-    return 'desktop';
-  }
-  
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
-    const screenCategory = getScreenCategory(windowWidth);
-    const cacheKey = `${step}-${screenCategory}-${windowWidth}-${windowHeight}`;
-    
-    // Return cached result if available
-    if (responsiveViewBoxCache.has(cacheKey)) {
-      return responsiveViewBoxCache.get(cacheKey);
-    }
+    const startTime = performance.now();
+    addDebugLog(`getResponsiveViewBox START: step=${step}`, 'info');
     
     const [x, y, width, height] = viewBoxArray;
     
+    // Determine screen category
+    let screenCategory = 'desktop';
+    if (windowWidth <= 480) {
+      screenCategory = 'mobile';
+    } else if (windowWidth <= 768) {
+      screenCategory = 'mobile';
+    } else if (windowWidth <= 1024) {
+      screenCategory = 'tablet';
+    } else {
+      screenCategory = 'desktop';
+    }
+    
     // Get adjustments for this step and screen size
     const adjustments = views[step].adjustments?.[screenCategory] || { offsetX: 0, offsetY: 0, scale: 1.0 };
-    
-    let result;
     
     // For India overview (step 0), apply adjustments without zoom
     if (step === 0) {
       const adjustedX = x + adjustments.offsetX;
       const adjustedY = y + adjustments.offsetY;
-      result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
+      const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
+      
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      performanceMetrics.getResponsiveViewBoxTime = duration;
+      addDebugLog(`getResponsiveViewBox END: step=${step}`, 'info', duration);
+      
+      return result;
+    }
+    
+    // Get base zoom factor for non-India steps
+    let zoomFactor = 1;
+    
+    if (windowWidth <= 480) {
+      zoomFactor = 2.0;
+    } else if (windowWidth <= 768) {
+      zoomFactor = 1.6;
+    } else if (windowWidth <= 1024) {
+      zoomFactor = 1.3;
     } else {
-      // Get base zoom factor for non-India steps
-      let zoomFactor = 1;
-      
-      if (windowWidth <= 480) {
-        zoomFactor = 2.0;
-      } else if (windowWidth <= 768) {
-        zoomFactor = 1.6;
-      } else if (windowWidth <= 1024) {
-        zoomFactor = 1.3;
-      } else {
-        zoomFactor = 1.0;
-      }
-      
-      // Apply custom scale to zoom factor
-      const finalZoomFactor = zoomFactor * adjustments.scale;
-      
-      // Apply zoom by reducing viewBox dimensions (zooms in)
-      const zoomedWidth = width / finalZoomFactor;
-      const zoomedHeight = height / finalZoomFactor;
-      
-      // Calculate center with custom offset
-      const centerX = x + width / 2 + adjustments.offsetX;
-      const centerY = y + height / 2 + adjustments.offsetY;
-      
-      const newX = centerX - zoomedWidth / 2;
-      const newY = centerY - zoomedHeight / 2;
-      
-      // Now adjust for aspect ratio
-      result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
+      zoomFactor = 1.0;
     }
     
-    // Cache the result
-    responsiveViewBoxCache.set(cacheKey, result);
+    // Apply custom scale to zoom factor
+    const finalZoomFactor = zoomFactor * adjustments.scale;
     
-    // Clear cache if screen category changes
-    if (lastScreenCategory !== screenCategory) {
-      responsiveViewBoxCache.clear();
-      responsiveViewBoxCache.set(cacheKey, result);
-      lastScreenCategory = screenCategory;
-    }
+    // Apply zoom by reducing viewBox dimensions (zooms in)
+    const zoomedWidth = width / finalZoomFactor;
+    const zoomedHeight = height / finalZoomFactor;
+    
+    // Calculate center with custom offset
+    const centerX = x + width / 2 + adjustments.offsetX;
+    const centerY = y + height / 2 + adjustments.offsetY;
+    
+    const newX = centerX - zoomedWidth / 2;
+    const newY = centerY - zoomedHeight / 2;
+    
+    // Now adjust for aspect ratio
+    const result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
+    
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    performanceMetrics.getResponsiveViewBoxTime = duration;
+    addDebugLog(`getResponsiveViewBox END: step=${step}`, 'info', duration);
     
     return result;
   }
@@ -234,81 +281,99 @@
   
   let viewBoxString = '';
   
+  // Track tweened store activity
   viewBoxStore.subscribe(value => {
+    debugInfo.tweenedActive = true;
     viewBoxString = value.map(v => v.toFixed(2)).join(' ');
+    addDebugLog(`TWEENED UPDATE: ${viewBoxString.substring(0, 50)}...`, 'info');
+    
+    // Reset tweened active flag after animation
+    setTimeout(() => {
+      debugInfo.tweenedActive = false;
+    }, DURATION + 100);
   });
   
   function updateViewBox(step, width, height) {
+    const startTime = performance.now();
+    addDebugLog(`updateViewBox START: step=${step} (${views[step].name})`, 'info');
+    
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
+    
+    const tweenStartTime = performance.now();
     viewBoxStore.set(responsiveViewBox);
-  }
-  
-  // === DEBUG & FIX #2: Enhanced scroll debugging ===
-  let scrollTimeout;
-  let isScrolling = false;
-  let debugLogs = [];
-  let scrollEventCount = 0;
-  
-  function addDebugLog(message, type = 'info') {
-    const timestamp = new Date().toLocaleTimeString();
-    debugLogs = [...debugLogs.slice(-25), { timestamp, message, type, id: Date.now() }];
-    console.log(`[${timestamp}] ${message}`);
+    const tweenEndTime = performance.now();
+    
+    const endTime = performance.now();
+    const totalDuration = endTime - startTime;
+    const tweenDuration = tweenEndTime - tweenStartTime;
+    
+    performanceMetrics.updateViewBoxTime = totalDuration;
+    performanceMetrics.tweenedSetTime = tweenDuration;
+    
+    addDebugLog(`updateViewBox END: step=${step}`, 'success', totalDuration);
+    addDebugLog(`TWEENED SET took`, 'info', tweenDuration);
   }
   
   function onScroll() {
-    const startTime = performance.now();
-    scrollEventCount++;
+    const scrollStartTime = performance.now();
+    debugInfo.eventCount++;
     
-    // === ENHANCED DEBUG FOR STEP 1→0 FREEZING ===
-    const currentScrollY = window.scrollY;
+    addDebugLog(`SCROLL EVENT #${debugInfo.eventCount} START`, 'info');
+    
+    const scrollY = window.scrollY;
     const height = window.innerHeight;
-    const rawStep = Math.floor(currentScrollY / height);
-    const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
-    
-    // Log critical step 1→0 transitions
-    if ((currentStep === 1 && calculatedStep === 0) || (currentStep === 0 && calculatedStep === 1)) {
-      addDebugLog(`CRITICAL TRANSITION: ${currentStep}→${calculatedStep}, scroll=${currentScrollY}, isScrolling=${isScrolling}`, 'warning');
-    }
-    
-    // === FIX #2: Skip processing if already processing ===
-    if (isScrolling) {
-      addDebugLog(`BLOCKED: Already processing (events: ${scrollEventCount})`, 'warning');
-      return;
-    }
-    isScrolling = true;
-    
     const totalScrollytellingHeight = (views.length + 1) * height;
+    
+    // Update debug info
+    debugInfo.scrollY = scrollY;
     
     // Determine scroll direction with better tracking
     const lastScrollY = window.lastScrollY || 0;
-    const scrollDirection = currentScrollY > lastScrollY ? 'down' : 'up';
-    const scrollDelta = Math.abs(currentScrollY - lastScrollY);
+    const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
+    const scrollDelta = Math.abs(scrollY - lastScrollY);
+    
+    debugInfo.scrollDirection = scrollDirection;
+    debugInfo.scrollDelta = scrollDelta;
     
     // Store last scroll position for direction detection
-    window.lastScrollY = currentScrollY;
+    window.lastScrollY = scrollY;
     lastScrollDirection = scrollDirection;
     
-    if (currentScrollY < totalScrollytellingHeight) {
+    if (scrollY < totalScrollytellingHeight) {
       // We're in the scrollytelling section
       const wasScrollytellingActive = isScrollytellingActive;
       isScrollytellingActive = true;
       
       // Calculate the step based on scroll position
-      const rawStep = Math.floor(currentScrollY / height);
+      const rawStep = Math.floor(scrollY / height);
       const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
       
-      // === FIX #3: Smooth step progression - Remove limiting logic ===
-      let newStep = calculatedStep;
+      debugInfo.calculatedStep = calculatedStep;
+      debugInfo.currentStep = currentStep;
       
-      // Only limit if user is scrolling extremely fast (more than 2 steps at once)
-      const stepDifference = Math.abs(calculatedStep - currentStep);
-      if (stepDifference > 2) {
-        // Allow jumping but limit to 2 steps max per scroll event
-        if (calculatedStep > currentStep) {
-          newStep = Math.min(calculatedStep, currentStep + 2);
+      // Log critical step 1→0 transitions
+      if ((currentStep === 1 && calculatedStep === 0) || (currentStep === 0 && calculatedStep === 1)) {
+        addDebugLog(`CRITICAL 1↔0 TRANSITION: ${currentStep}→${calculatedStep}, scroll=${scrollY}`, 'error');
+      }
+      
+      // Improved step changing - allow direct step changes when scrolling up from end
+      let newStep;
+      
+      // If we're coming back from the end (scrolling up from outside scrollytelling area)
+      if (!wasScrollytellingActive && scrollDirection === 'up') {
+        // Allow jumping to the calculated step directly
+        newStep = calculatedStep;
+      } else {
+        // Normal step progression - prevent excessive jumping
+        if (scrollDirection === 'up' && calculatedStep < currentStep - 1) {
+          // When scrolling up, limit to one step back unless there's a big scroll delta (fast scroll)
+          newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.max(0, currentStep - 1);
+        } else if (scrollDirection === 'down' && calculatedStep > currentStep + 1) {
+          // When scrolling down, limit to one step forward unless there's a big scroll delta
+          newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.min(views.length - 1, currentStep + 1);
         } else {
-          newStep = Math.max(calculatedStep, currentStep - 2);
+          newStep = calculatedStep;
         }
       }
       
@@ -318,27 +383,13 @@
       // Update step if changed
       if (newStep !== currentStep) {
         addDebugLog(`STEP CHANGE: ${currentStep}→${newStep} (${views[newStep].name})`, 'success');
-        
-        // === CRITICAL FIX: Check if this is the problematic 1→0 transition ===
-        if ((currentStep === 1 && newStep === 0) || (currentStep === 0 && newStep === 1)) {
-          addDebugLog(`CRITICAL STEP CHANGE DETECTED: ${currentStep}→${newStep}`, 'error');
-          
-          // Force a small delay for these critical transitions
-          setTimeout(() => {
-            currentStep = newStep;
-            updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-            addDebugLog(`DELAYED UPDATE COMPLETED: ${newStep}`, 'success');
-          }, 50);
-        } else {
-          // Normal step change
-          currentStep = newStep;
-          updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-        }
+        currentStep = newStep;
+        updateViewBox(currentStep, window.innerWidth, window.innerHeight);
       }
       
       // Info panel visibility logic
       const lastStepThreshold = views.length * height; // Start of the extra viewport
-      const newShowInfoPanel = currentScrollY < lastStepThreshold;
+      const newShowInfoPanel = scrollY < lastStepThreshold;
       showInfoPanel = newShowInfoPanel;
       
     } else {
@@ -347,18 +398,20 @@
       showInfoPanel = false;
     }
     
-    // === FIX #2: Reset scroll processing after a brief delay ===
-    const processingTime = performance.now() - startTime;
+    const scrollEndTime = performance.now();
+    const scrollDuration = scrollEndTime - scrollStartTime;
+    performanceMetrics.totalScrollEventTime = scrollDuration;
+    debugInfo.lastProcessTime = scrollDuration;
     
-    // Log slow processing that could cause freezing
-    if (processingTime > 16) { // Longer than one frame (60fps)
-      addDebugLog(`SLOW PROCESSING: ${processingTime.toFixed(2)}ms for step ${currentStep}`, 'error');
+    addDebugLog(`SCROLL EVENT #${debugInfo.eventCount} END`, 'info', scrollDuration);
+    
+    // Detect potential freeze conditions
+    if (scrollDuration > 16) {
+      addDebugLog(`SLOW SCROLL EVENT: ${scrollDuration.toFixed(2)}ms - POTENTIAL FREEZE RISK`, 'error');
+      debugInfo.freezeDetected = true;
+    } else {
+      debugInfo.freezeDetected = false;
     }
-    
-    clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(() => {
-      isScrolling = false;
-    }, Math.max(10, processingTime * 2)); // Adaptive timeout based on processing time
   }
   
   // Throttled resize handler for better mobile performance
@@ -366,8 +419,6 @@
   function onResize() {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-      // === FIX #1: Clear cache on resize ===
-      responsiveViewBoxCache.clear();
       updateViewBox(currentStep, window.innerWidth, window.innerHeight);
     }, 100); // Debounce resize events
   }
@@ -434,6 +485,9 @@
   onMount(() => {
     if (!browser) return;
     
+    // Start main thread monitoring
+    trackMainThreadBlocking();
+    
     // Start monitoring the large image load
     monitorLargeImageLoad();
     setupProgressiveLoading();
@@ -467,34 +521,18 @@
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
       clearTimeout(resizeTimeout);
-      clearTimeout(scrollTimeout);
     };
   });
   
-  // === FIX #4: Prevent duplicate reactive updates ===
-  let lastReactiveWidth = 0;
-  let lastReactiveHeight = 0;
-  let lastReactiveStep = -1;
-  
+  // Reactive statement with bounds checking
   $: if (browser && innerWidth && innerHeight) {
-    // Only update if dimensions OR step actually changed
-    if (innerWidth !== lastReactiveWidth || 
-        innerHeight !== lastReactiveHeight || 
-        currentStep !== lastReactiveStep) {
-      
-      // Ensure currentStep is within bounds before updating
-      const safeStep = Math.min(views.length - 1, Math.max(0, currentStep));
-      if (safeStep !== currentStep) {
-        currentStep = safeStep;
-      }
-      
-      updateViewBox(currentStep, innerWidth, innerHeight);
-      
-      // Update last values
-      lastReactiveWidth = innerWidth;
-      lastReactiveHeight = innerHeight;
-      lastReactiveStep = currentStep;
+    // Ensure currentStep is within bounds before updating
+    const safeStep = Math.min(views.length - 1, Math.max(0, currentStep));
+    if (safeStep !== currentStep) {
+      currentStep = safeStep;
     }
+    
+    updateViewBox(currentStep, innerWidth, innerHeight);
   }
   
 </script>
@@ -729,47 +767,65 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<!-- === CRITICAL DEBUG PANEL FOR STEP 1→0 ISSUE === -->
+<!-- COMPREHENSIVE DEBUG PANEL -->
 <div style="
   position: fixed;
   top: 10px;
   right: 10px;
-  width: 300px;
-  max-height: 60vh;
+  width: 350px;
+  max-height: 80vh;
   background: rgba(0, 0, 0, 0.95);
   color: white;
-  padding: 10px;
+  padding: 12px;
   border-radius: 8px;
   font-family: monospace;
-  font-size: 11px;
+  font-size: 10px;
   z-index: 10000;
   overflow-y: auto;
-  border: 2px solid #f44336;
+  border: 2px solid {debugInfo.freezeDetected || debugInfo.mainThreadBlocked ? '#f44336' : '#4CAF50'};
 ">
   <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-    <strong style="color: #f44336;">🚨 FREEZE DEBUG</strong>
+    <strong style="color: {debugInfo.freezeDetected || debugInfo.mainThreadBlocked ? '#f44336' : '#4CAF50'};">
+      🔍 DETAILED DEBUG
+    </strong>
     <button onclick="location.reload()" style="background: #4CAF50; color: white; border: none; padding: 2px 6px; border-radius: 2px; font-size: 9px;">Reload</button>
   </div>
   
-  <div style="margin-bottom: 8px; padding: 6px; background: rgba(244, 67, 54, 0.2); border-radius: 3px;">
-    <strong>Current:</strong> Step {currentStep} ({views[currentStep]?.name})<br>
-    <strong>Scroll Events:</strong> {scrollEventCount}<br>
-    <strong>Processing:</strong> {isScrolling ? '🔴 ACTIVE' : '🟢 FREE'}<br>
-    <strong>Direction:</strong> {lastScrollDirection}
+  <!-- Current State -->
+  <div style="margin-bottom: 10px; padding: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px;">
+    <strong>Current State:</strong><br>
+    Step: {debugInfo.currentStep} → {debugInfo.calculatedStep} ({views[debugInfo.currentStep]?.name})<br>
+    Scroll: {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta})<br>
+    Events: {debugInfo.eventCount}<br>
+    Main Thread: {debugInfo.mainThreadBlocked ? '🔴 BLOCKED' : '🟢 FREE'}<br>
+    Tweened: {debugInfo.tweenedActive ? '🔴 ANIMATING' : '🟢 IDLE'}<br>
+    Freeze Risk: {debugInfo.freezeDetected ? '🚨 HIGH' : '✅ LOW'}
   </div>
   
-  <div style="max-height: 250px; overflow-y: auto;">
-    <strong>Critical Logs:</strong>
-    {#each debugLogs.slice(-15).reverse() as log}
+  <!-- Performance Metrics -->
+  <div style="margin-bottom: 10px; padding: 6px; background: rgba(255, 152, 0, 0.2); border-radius: 3px;">
+    <strong>Performance (ms):</strong><br>
+    getResponsiveViewBox: {performanceMetrics.getResponsiveViewBoxTime.toFixed(2)}<br>
+    updateViewBox: {performanceMetrics.updateViewBoxTime.toFixed(2)}<br>
+    tweened.set: {performanceMetrics.tweenedSetTime.toFixed(2)}<br>
+    Total Scroll Event: {performanceMetrics.totalScrollEventTime.toFixed(2)}<br>
+    Last Process: {debugInfo.lastProcessTime.toFixed(2)}
+  </div>
+  
+  <!-- Recent Logs -->
+  <div style="max-height: 300px; overflow-y: auto;">
+    <strong>Detailed Logs:</strong>
+    {#each debugLogs.slice(-12).reverse() as log}
       <div style="
         margin: 1px 0; 
         padding: 2px 4px; 
-        background: {log.type === 'error' ? 'rgba(244, 67, 54, 0.3)' : log.type === 'warning' ? 'rgba(255, 152, 0, 0.2)' : 'rgba(255, 255, 255, 0.05)'}; 
+        background: {log.type === 'error' ? 'rgba(244, 67, 54, 0.3)' : log.type === 'warning' ? 'rgba(255, 152, 0, 0.2)' : log.type === 'success' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 255, 255, 0.05)'}; 
         border-radius: 2px;
         border-left: 2px solid {log.type === 'error' ? '#f44336' : log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : '#2196F3'};
         font-size: 9px;
+        word-break: break-all;
       ">
-        <span style="color: #888;">{log.timestamp.split(':').slice(-2).join(':')}</span>
+        <span style="color: #888;">{log.timestamp.split(':').slice(-2).join(':')}</span><br>
         <span style="color: {log.type === 'error' ? '#f44336' : log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : 'white'};">
           {log.message}
         </span>
@@ -777,7 +833,6 @@
     {/each}
   </div>
 </div>
-<!-- === END CRITICAL DEBUG === -->
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
