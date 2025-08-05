@@ -261,14 +261,14 @@
     scrollEventCount++;
     
     // === ENHANCED DEBUG FOR STEP 1→0 FREEZING ===
-    const scrollY = window.scrollY;
+    const currentScrollY = window.scrollY;
     const height = window.innerHeight;
-    const rawStep = Math.floor(scrollY / height);
+    const rawStep = Math.floor(currentScrollY / height);
     const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
     
     // Log critical step 1→0 transitions
     if ((currentStep === 1 && calculatedStep === 0) || (currentStep === 0 && calculatedStep === 1)) {
-      addDebugLog(`CRITICAL TRANSITION: ${currentStep}→${calculatedStep}, scroll=${scrollY}, isScrolling=${isScrolling}`, 'warning');
+      addDebugLog(`CRITICAL TRANSITION: ${currentStep}→${calculatedStep}, scroll=${currentScrollY}, isScrolling=${isScrolling}`, 'warning');
     }
     
     // === FIX #2: Skip processing if already processing ===
@@ -278,26 +278,24 @@
     }
     isScrolling = true;
     
-    const scrollY = window.scrollY;
-    const height = window.innerHeight;
     const totalScrollytellingHeight = (views.length + 1) * height;
     
     // Determine scroll direction with better tracking
     const lastScrollY = window.lastScrollY || 0;
-    const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
-    const scrollDelta = Math.abs(scrollY - lastScrollY);
+    const scrollDirection = currentScrollY > lastScrollY ? 'down' : 'up';
+    const scrollDelta = Math.abs(currentScrollY - lastScrollY);
     
     // Store last scroll position for direction detection
-    window.lastScrollY = scrollY;
+    window.lastScrollY = currentScrollY;
     lastScrollDirection = scrollDirection;
     
-    if (scrollY < totalScrollytellingHeight) {
+    if (currentScrollY < totalScrollytellingHeight) {
       // We're in the scrollytelling section
       const wasScrollytellingActive = isScrollytellingActive;
       isScrollytellingActive = true;
       
       // Calculate the step based on scroll position
-      const rawStep = Math.floor(scrollY / height);
+      const rawStep = Math.floor(currentScrollY / height);
       const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
       
       // === FIX #3: Smooth step progression - Remove limiting logic ===
@@ -340,7 +338,7 @@
       
       // Info panel visibility logic
       const lastStepThreshold = views.length * height; // Start of the extra viewport
-      const newShowInfoPanel = scrollY < lastStepThreshold;
+      const newShowInfoPanel = currentScrollY < lastStepThreshold;
       showInfoPanel = newShowInfoPanel;
       
     } else {
