@@ -1,60 +1,11 @@
 <script>
+  import { tweened } from 'svelte/motion';
+  import { cubicOut } from 'svelte/easing';
   import { onMount } from 'svelte';
   import { browser } from '$app/environment';
   
   let innerWidth;
   let innerHeight;
-  
-  // === SAME DEBUG TRACKING ===
-  let debugInfo = {
-    scrollY: 0,
-    currentStep: 0,
-    calculatedStep: 0,
-    scrollDirection: 'none',
-    scrollDelta: 0,
-    eventCount: 0,
-    freezeDetected: false,
-    lastProcessTime: 0,
-    tweenedActive: false, // Will always be false now
-    mainThreadBlocked: false
-  };
-  
-  let debugLogs = [];
-  let performanceMetrics = {
-    getResponsiveViewBoxTime: 0,
-    updateViewBoxTime: 0,
-    tweenedSetTime: 0, // Will always be 0 now
-    totalScrollEventTime: 0
-  };
-  
-  function addDebugLog(message, type = 'info', timing = null) {
-    const timestamp = new Date().toLocaleTimeString();
-    const entry = { 
-      timestamp, 
-      message: timing ? `${message} (${timing.toFixed(2)}ms)` : message, 
-      type, 
-      id: Date.now() 
-    };
-    debugLogs = [...debugLogs.slice(-20), entry];
-    console.log(`[${timestamp}] ${entry.message}`);
-  }
-  
-  // Track main thread blocking
-  let lastFrameTime = performance.now();
-  function trackMainThreadBlocking() {
-    const now = performance.now();
-    const frameDelta = now - lastFrameTime;
-    
-    if (frameDelta > 32) { // More than 2 frames at 60fps
-      debugInfo.mainThreadBlocked = true;
-      addDebugLog(`MAIN THREAD BLOCKED: ${frameDelta.toFixed(2)}ms gap`, 'error');
-    } else {
-      debugInfo.mainThreadBlocked = false;
-    }
-    
-    lastFrameTime = now;
-    if (browser) requestAnimationFrame(trackMainThreadBlocking);
-  }
   
   //lazy loading
   let highResImage;
@@ -173,13 +124,9 @@
   let showInfoPanel = true;
   let lastScrollDirection = 'down';
   
-  // === REMOVED TWEENED - USING DIRECT SVG VIEWBOX ===
-  let viewBoxString = '0 0 6000 6750'; // Start with India viewBox
+  const DURATION = 1000;
   
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
-    const startTime = performance.now();
-    addDebugLog(`getResponsiveViewBox START: step=${step}`, 'info');
-    
     const [x, y, width, height] = viewBoxArray;
     
     // Determine screen category
@@ -202,12 +149,6 @@
       const adjustedX = x + adjustments.offsetX;
       const adjustedY = y + adjustments.offsetY;
       const result = adjustForAspectRatio(adjustedX, adjustedY, width, height, windowWidth, windowHeight);
-      
-      const endTime = performance.now();
-      const duration = endTime - startTime;
-      performanceMetrics.getResponsiveViewBoxTime = duration;
-      addDebugLog(`getResponsiveViewBox END: step=${step}`, 'info', duration);
-      
       return result;
     }
     
@@ -241,11 +182,6 @@
     // Now adjust for aspect ratio
     const result = adjustForAspectRatio(newX, newY, zoomedWidth, zoomedHeight, windowWidth, windowHeight);
     
-    const endTime = performance.now();
-    const duration = endTime - startTime;
-    performanceMetrics.getResponsiveViewBoxTime = duration;
-    addDebugLog(`getResponsiveViewBox END: step=${step}`, 'info', duration);
-    
     return result;
   }
   
@@ -273,52 +209,32 @@
     return result;
   }
   
-  // === NO MORE TWEENED - DIRECT VIEWBOX UPDATE ===
+  const viewBoxStore = tweened(views[0].viewBox, {
+    duration: DURATION,
+    easing: cubicOut
+  });
+  
+  let viewBoxString = '';
+  
+  viewBoxStore.subscribe(value => {
+    viewBoxString = value.map(v => v.toFixed(2)).join(' ');
+  });
+  
   function updateViewBox(step, width, height) {
-    const startTime = performance.now();
-    addDebugLog(`updateViewBox START: step=${step} (${views[step].name})`, 'info');
-    
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
-    
-    // DIRECT UPDATE - NO ANIMATION
-    const directStartTime = performance.now();
-    viewBoxString = responsiveViewBox.map(v => v.toFixed(2)).join(' ');
-    const directEndTime = performance.now();
-    
-    addDebugLog(`DIRECT VIEWBOX UPDATE: ${viewBoxString.substring(0, 50)}...`, 'info');
-    
-    const endTime = performance.now();
-    const totalDuration = endTime - startTime;
-    const directDuration = directEndTime - directStartTime;
-    
-    performanceMetrics.updateViewBoxTime = totalDuration;
-    performanceMetrics.tweenedSetTime = directDuration; // This is now direct update time
-    
-    addDebugLog(`updateViewBox END: step=${step}`, 'success', totalDuration);
-    addDebugLog(`DIRECT UPDATE took`, 'info', directDuration);
+    viewBoxStore.set(responsiveViewBox);
   }
   
   function onScroll() {
-    const scrollStartTime = performance.now();
-    debugInfo.eventCount++;
-    
-    addDebugLog(`SCROLL EVENT #${debugInfo.eventCount} START`, 'info');
-    
     const scrollY = window.scrollY;
     const height = window.innerHeight;
     const totalScrollytellingHeight = (views.length + 1) * height;
-    
-    // Update debug info
-    debugInfo.scrollY = scrollY;
     
     // Determine scroll direction with better tracking
     const lastScrollY = window.lastScrollY || 0;
     const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
     const scrollDelta = Math.abs(scrollY - lastScrollY);
-    
-    debugInfo.scrollDirection = scrollDirection;
-    debugInfo.scrollDelta = scrollDelta;
     
     // Store last scroll position for direction detection
     window.lastScrollY = scrollY;
@@ -332,14 +248,6 @@
       // Calculate the step based on scroll position
       const rawStep = Math.floor(scrollY / height);
       const calculatedStep = Math.min(views.length - 1, Math.max(0, rawStep));
-      
-      debugInfo.calculatedStep = calculatedStep;
-      debugInfo.currentStep = currentStep;
-      
-      // Log critical step 1→0 transitions
-      if ((currentStep === 1 && calculatedStep === 0) || (currentStep === 0 && calculatedStep === 1)) {
-        addDebugLog(`CRITICAL 1↔0 TRANSITION: ${currentStep}→${calculatedStep}, scroll=${scrollY}`, 'error');
-      }
       
       // Improved step changing - allow direct step changes when scrolling up from end
       let newStep;
@@ -366,7 +274,6 @@
       
       // Update step if changed
       if (newStep !== currentStep) {
-        addDebugLog(`STEP CHANGE: ${currentStep}→${newStep} (${views[newStep].name})`, 'success');
         currentStep = newStep;
         updateViewBox(currentStep, window.innerWidth, window.innerHeight);
       }
@@ -380,21 +287,6 @@
       // We've scrolled past the scrollytelling section
       isScrollytellingActive = false;
       showInfoPanel = false;
-    }
-    
-    const scrollEndTime = performance.now();
-    const scrollDuration = scrollEndTime - scrollStartTime;
-    performanceMetrics.totalScrollEventTime = scrollDuration;
-    debugInfo.lastProcessTime = scrollDuration;
-    
-    addDebugLog(`SCROLL EVENT #${debugInfo.eventCount} END`, 'info', scrollDuration);
-    
-    // Detect potential freeze conditions
-    if (scrollDuration > 16) {
-      addDebugLog(`SLOW SCROLL EVENT: ${scrollDuration.toFixed(2)}ms - POTENTIAL FREEZE RISK`, 'error');
-      debugInfo.freezeDetected = true;
-    } else {
-      debugInfo.freezeDetected = false;
     }
   }
   
@@ -468,9 +360,6 @@
   
   onMount(() => {
     if (!browser) return;
-    
-    // Start main thread monitoring
-    trackMainThreadBlocking();
     
     // Start monitoring the large image load
     monitorLargeImageLoad();
@@ -751,72 +640,6 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<!-- SAME DEBUG PANEL -->
-<div style="
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  width: 350px;
-  max-height: 80vh;
-  background: rgba(0, 0, 0, 0.95);
-  color: white;
-  padding: 12px;
-  border-radius: 8px;
-  font-family: monospace;
-  font-size: 10px;
-  z-index: 10000;
-  overflow-y: auto;
-  border: 2px solid {debugInfo.freezeDetected || debugInfo.mainThreadBlocked ? '#f44336' : '#4CAF50'};
-">
-  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-    <strong style="color: {debugInfo.freezeDetected || debugInfo.mainThreadBlocked ? '#f44336' : '#4CAF50'};">
-      🧪 NO TWEENED TEST
-    </strong>
-    <button onclick="location.reload()" style="background: #4CAF50; color: white; border: none; padding: 2px 6px; border-radius: 2px; font-size: 9px;">Reload</button>
-  </div>
-  
-  <!-- Current State -->
-  <div style="margin-bottom: 10px; padding: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px;">
-    <strong>Current State:</strong><br>
-    Step: {debugInfo.currentStep} → {debugInfo.calculatedStep} ({views[debugInfo.currentStep]?.name})<br>
-    Scroll: {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta})<br>
-    Events: {debugInfo.eventCount}<br>
-    Main Thread: {debugInfo.mainThreadBlocked ? '🔴 BLOCKED' : '🟢 FREE'}<br>
-    Tweened: ❌ DISABLED<br>
-    Freeze Risk: {debugInfo.freezeDetected ? '🚨 HIGH' : '✅ LOW'}
-  </div>
-  
-  <!-- Performance Metrics -->
-  <div style="margin-bottom: 10px; padding: 6px; background: rgba(255, 152, 0, 0.2); border-radius: 3px;">
-    <strong>Performance (ms):</strong><br>
-    getResponsiveViewBox: {performanceMetrics.getResponsiveViewBoxTime.toFixed(2)}<br>
-    updateViewBox: {performanceMetrics.updateViewBoxTime.toFixed(2)}<br>
-    direct.set: {performanceMetrics.tweenedSetTime.toFixed(2)}<br>
-    Total Scroll Event: {performanceMetrics.totalScrollEventTime.toFixed(2)}<br>
-    Last Process: {debugInfo.lastProcessTime.toFixed(2)}
-  </div>
-  
-  <!-- Recent Logs -->
-  <div style="max-height: 300px; overflow-y: auto;">
-    <strong>Detailed Logs:</strong>
-    {#each debugLogs.slice(-12).reverse() as log}
-      <div style="
-        margin: 1px 0; 
-        padding: 2px 4px; 
-        background: {log.type === 'error' ? 'rgba(244, 67, 54, 0.3)' : log.type === 'warning' ? 'rgba(255, 152, 0, 0.2)' : log.type === 'success' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 255, 255, 0.05)'}; 
-        border-radius: 2px;
-        border-left: 2px solid {log.type === 'error' ? '#f44336' : log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : '#2196F3'};
-        font-size: 9px;
-        word-break: break-all;
-      ">
-        <span style="color: #888;">{log.timestamp.split(':').slice(-2).join(':')}</span><br>
-        <span style="color: {log.type === 'error' ? '#f44336' : log.type === 'warning' ? '#ff9800' : log.type === 'success' ? '#4CAF50' : 'white'};">
-          {log.message}
-        </span>
-      </div>
-    {/each}
-  </div>
-</div>
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
@@ -1029,7 +852,7 @@
   <section style="height: 100vh;"></section>
 {/each}
 
-<!-- Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
+Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive
 {#if showInfoPanel && views[currentStep]?.info}
 <div class="info-panel" class:visible={views[currentStep].info}>
   <h2>{views[currentStep].info.title}</h2>
