@@ -11,6 +11,13 @@
   let highResImage;
   let isHighResLoaded = false;
   
+  // iOS detection
+  let isIOS = false;
+  if (browser) {
+    isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  
   function setupProgressiveLoading() {
     if (!browser || !highResImage) return;
     
@@ -124,7 +131,8 @@
   let showInfoPanel = true;
   let lastScrollDirection = 'down';
   
-  const DURATION = 1000;
+  // Adjusted duration for iOS - shorter for smoother feel
+  const DURATION = isIOS ? 800 : 1000;
   
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
     const [x, y, width, height] = viewBoxArray;
@@ -226,18 +234,30 @@
     viewBoxStore.set(responsiveViewBox);
   }
   
+  // Optimized scroll handler with requestAnimationFrame
+  let ticking = false;
+  let lastScrollY = 0;
+  
   function onScroll() {
-    const scrollY = window.scrollY;
+    lastScrollY = window.scrollY;
+    
+    if (!ticking) {
+      requestAnimationFrame(updateScrollPosition);
+      ticking = true;
+    }
+  }
+  
+  function updateScrollPosition() {
+    const scrollY = lastScrollY;
     const height = window.innerHeight;
     const totalScrollytellingHeight = (views.length + 1) * height;
     
     // Determine scroll direction with better tracking
-    const lastScrollY = window.lastScrollY || 0;
-    const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
-    const scrollDelta = Math.abs(scrollY - lastScrollY);
+    const scrollDirection = scrollY > (window.prevScrollY || 0) ? 'down' : 'up';
+    const scrollDelta = Math.abs(scrollY - (window.prevScrollY || 0));
     
-    // Store last scroll position for direction detection
-    window.lastScrollY = scrollY;
+    // Store previous scroll position for direction detection
+    window.prevScrollY = scrollY;
     lastScrollDirection = scrollDirection;
     
     if (scrollY < totalScrollytellingHeight) {
@@ -258,12 +278,15 @@
         newStep = calculatedStep;
       } else {
         // Normal step progression - prevent excessive jumping
+        // iOS: Use smaller threshold for more responsive feel
+        const threshold = isIOS ? height * 0.3 : height * 0.5;
+        
         if (scrollDirection === 'up' && calculatedStep < currentStep - 1) {
           // When scrolling up, limit to one step back unless there's a big scroll delta (fast scroll)
-          newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.max(0, currentStep - 1);
+          newStep = scrollDelta > threshold ? calculatedStep : Math.max(0, currentStep - 1);
         } else if (scrollDirection === 'down' && calculatedStep > currentStep + 1) {
           // When scrolling down, limit to one step forward unless there's a big scroll delta
-          newStep = scrollDelta > height * 0.5 ? calculatedStep : Math.min(views.length - 1, currentStep + 1);
+          newStep = scrollDelta > threshold ? calculatedStep : Math.min(views.length - 1, currentStep + 1);
         } else {
           newStep = calculatedStep;
         }
@@ -288,6 +311,8 @@
       isScrollytellingActive = false;
       showInfoPanel = false;
     }
+    
+    ticking = false;
   }
   
   // Throttled resize handler for better mobile performance
@@ -296,7 +321,7 @@
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
       updateViewBox(currentStep, window.innerWidth, window.innerHeight);
-    }, 100); // Debounce resize events
+    }, isIOS ? 50 : 100); // Faster response on iOS
   }
   
   // Monitor the loading time of the large image
@@ -361,6 +386,11 @@
   onMount(() => {
     if (!browser) return;
     
+    // iOS Safari optimization: disable elastic scrolling if needed
+    if (isIOS) {
+      document.body.style.overscrollBehaviorY = 'none';
+    }
+    
     // Start monitoring the large image load
     monitorLargeImageLoad();
     setupProgressiveLoading();
@@ -394,6 +424,11 @@
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
       clearTimeout(resizeTimeout);
+      
+      // Cleanup iOS optimization
+      if (isIOS) {
+        document.body.style.overscrollBehaviorY = '';
+      }
     };
   });
   
@@ -423,6 +458,10 @@
     opacity: 1;
     transition: opacity 0.5s ease-out;
     z-index: 10;
+    /* iOS optimization */
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
   }
 
   /* Hide the SVG wrapper when scrollytelling is not active */
@@ -435,6 +474,10 @@
     width: 100%;
     height: 100%;
     display: block;
+    /* iOS optimization for SVG rendering */
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
   }
 
   #Labels {
@@ -461,6 +504,7 @@
     transform: translateY(-50%);
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); /* iOS Safari support */
     border-radius: 12px;
     padding: 24px;
     max-width: 350px;
@@ -473,11 +517,15 @@
     pointer-events: none;
     z-index: 1000;
     font-family: Georgia, serif;
+    /* iOS optimization */
+    -webkit-transform: translate3d(-30px, -50%, 0);
+    will-change: transform, opacity;
   }
 
   .info-panel.visible {
     opacity: 0.8;
     transform: translateY(-50%) translateX(0);
+    -webkit-transform: translate3d(0, -50%, 0);
     pointer-events: auto;
   }
 
@@ -545,6 +593,7 @@
       top: auto;
       bottom: 20px;
       transform: none;
+      -webkit-transform: translate3d(0, 0, 0);
       border-radius: 16px;
       backdrop-filter: blur(15px);
       -webkit-backdrop-filter: blur(15px); /* iOS Safari support */
@@ -552,6 +601,7 @@
 
     .info-panel.visible {
       transform: none;
+      -webkit-transform: translate3d(0, 0, 0);
       opacity: 0.9; /* Slightly more opaque on mobile */
     }
 
@@ -624,22 +674,40 @@
     opacity: 1;
   }
 
-  /* Fix for iOS Safari scrolling issues */
+  /* Enhanced iOS Safari optimizations */
   @supports (-webkit-touch-callout: none) {
     .svg-wrapper {
       -webkit-transform: translate3d(0, 0, 0);
       transform: translate3d(0, 0, 0);
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      -webkit-perspective: 1000px;
+      perspective: 1000px;
     }
     
     .info-panel {
       -webkit-transform: translate3d(0, 0, 0);
       transform: translate3d(0, 0, 0);
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+    }
+
+    svg {
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+    }
+  }
+
+  /* Additional iOS optimization */
+  @media screen and (-webkit-min-device-pixel-ratio: 0) {
+    .svg-wrapper, .info-panel {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
   }
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
-
 
 <div class="svg-wrapper" class:hidden={!isScrollytellingActive}>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox={viewBoxString} preserveAspectRatio="xMidYMid meet">
