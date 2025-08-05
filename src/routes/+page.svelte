@@ -1,13 +1,11 @@
 <script>
-  import { tweened } from 'svelte/motion';
-  import { cubicOut } from 'svelte/easing';
   import { onMount } from 'svelte';
   import { browser } from '$app/environment';
   
   let innerWidth;
   let innerHeight;
   
-  // === COMPREHENSIVE DEBUG TRACKING ===
+  // === SAME DEBUG TRACKING ===
   let debugInfo = {
     scrollY: 0,
     currentStep: 0,
@@ -17,7 +15,7 @@
     eventCount: 0,
     freezeDetected: false,
     lastProcessTime: 0,
-    tweenedActive: false,
+    tweenedActive: false, // Will always be false now
     mainThreadBlocked: false
   };
   
@@ -25,7 +23,7 @@
   let performanceMetrics = {
     getResponsiveViewBoxTime: 0,
     updateViewBoxTime: 0,
-    tweenedSetTime: 0,
+    tweenedSetTime: 0, // Will always be 0 now
     totalScrollEventTime: 0
   };
   
@@ -175,7 +173,8 @@
   let showInfoPanel = true;
   let lastScrollDirection = 'down';
   
-  const DURATION = 1000;
+  // === REMOVED TWEENED - USING DIRECT SVG VIEWBOX ===
+  let viewBoxString = '0 0 6000 6750'; // Start with India viewBox
   
   function getResponsiveViewBox(viewBoxArray, windowWidth, windowHeight, step) {
     const startTime = performance.now();
@@ -274,25 +273,7 @@
     return result;
   }
   
-  const viewBoxStore = tweened(views[0].viewBox, {
-    duration: DURATION,
-    easing: cubicOut
-  });
-  
-  let viewBoxString = '';
-  
-  // Track tweened store activity
-  viewBoxStore.subscribe(value => {
-    debugInfo.tweenedActive = true;
-    viewBoxString = value.map(v => v.toFixed(2)).join(' ');
-    addDebugLog(`TWEENED UPDATE: ${viewBoxString.substring(0, 50)}...`, 'info');
-    
-    // Reset tweened active flag after animation
-    setTimeout(() => {
-      debugInfo.tweenedActive = false;
-    }, DURATION + 100);
-  });
-  
+  // === NO MORE TWEENED - DIRECT VIEWBOX UPDATE ===
   function updateViewBox(step, width, height) {
     const startTime = performance.now();
     addDebugLog(`updateViewBox START: step=${step} (${views[step].name})`, 'info');
@@ -300,19 +281,22 @@
     const originalViewBox = views[step].viewBox;
     const responsiveViewBox = getResponsiveViewBox(originalViewBox, width, height, step);
     
-    const tweenStartTime = performance.now();
-    viewBoxStore.set(responsiveViewBox);
-    const tweenEndTime = performance.now();
+    // DIRECT UPDATE - NO ANIMATION
+    const directStartTime = performance.now();
+    viewBoxString = responsiveViewBox.map(v => v.toFixed(2)).join(' ');
+    const directEndTime = performance.now();
+    
+    addDebugLog(`DIRECT VIEWBOX UPDATE: ${viewBoxString.substring(0, 50)}...`, 'info');
     
     const endTime = performance.now();
     const totalDuration = endTime - startTime;
-    const tweenDuration = tweenEndTime - tweenStartTime;
+    const directDuration = directEndTime - directStartTime;
     
     performanceMetrics.updateViewBoxTime = totalDuration;
-    performanceMetrics.tweenedSetTime = tweenDuration;
+    performanceMetrics.tweenedSetTime = directDuration; // This is now direct update time
     
     addDebugLog(`updateViewBox END: step=${step}`, 'success', totalDuration);
-    addDebugLog(`TWEENED SET took`, 'info', tweenDuration);
+    addDebugLog(`DIRECT UPDATE took`, 'info', directDuration);
   }
   
   function onScroll() {
@@ -767,7 +751,7 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<!-- COMPREHENSIVE DEBUG PANEL -->
+<!-- SAME DEBUG PANEL -->
 <div style="
   position: fixed;
   top: 10px;
@@ -786,7 +770,7 @@
 ">
   <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
     <strong style="color: {debugInfo.freezeDetected || debugInfo.mainThreadBlocked ? '#f44336' : '#4CAF50'};">
-      🔍 DETAILED DEBUG
+      🧪 NO TWEENED TEST
     </strong>
     <button onclick="location.reload()" style="background: #4CAF50; color: white; border: none; padding: 2px 6px; border-radius: 2px; font-size: 9px;">Reload</button>
   </div>
@@ -798,7 +782,7 @@
     Scroll: {debugInfo.scrollY}px ({debugInfo.scrollDirection}, Δ{debugInfo.scrollDelta})<br>
     Events: {debugInfo.eventCount}<br>
     Main Thread: {debugInfo.mainThreadBlocked ? '🔴 BLOCKED' : '🟢 FREE'}<br>
-    Tweened: {debugInfo.tweenedActive ? '🔴 ANIMATING' : '🟢 IDLE'}<br>
+    Tweened: ❌ DISABLED<br>
     Freeze Risk: {debugInfo.freezeDetected ? '🚨 HIGH' : '✅ LOW'}
   </div>
   
@@ -807,7 +791,7 @@
     <strong>Performance (ms):</strong><br>
     getResponsiveViewBox: {performanceMetrics.getResponsiveViewBoxTime.toFixed(2)}<br>
     updateViewBox: {performanceMetrics.updateViewBoxTime.toFixed(2)}<br>
-    tweened.set: {performanceMetrics.tweenedSetTime.toFixed(2)}<br>
+    direct.set: {performanceMetrics.tweenedSetTime.toFixed(2)}<br>
     Total Scroll Event: {performanceMetrics.totalScrollEventTime.toFixed(2)}<br>
     Last Process: {debugInfo.lastProcessTime.toFixed(2)}
   </div>
