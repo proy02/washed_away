@@ -82,7 +82,7 @@
       adjustments: {
         mobile: { offsetX: -100, offsetY: 100, scale: 0.65 },
         tablet: { offsetX: 0, offsetY: 0, scale: 1.15 },
-        desktop: { offsetX: 0, offsetY: 0, scale: 1.1 }
+        desktop: { offsetX: 0, offsetY: 0, scale: 1 }
       },
       info: {
         title: "Bihar",
@@ -852,7 +852,7 @@
   <section style="height: 100vh;"></section>
 {/each}
 
-Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive
+<!-- Info Panel for Scrollytelling - now uses showInfoPanel instead of isScrollytellingActive -->
 {#if showInfoPanel && views[currentStep]?.info}
 <div class="info-panel" class:visible={views[currentStep].info}>
   <h2>{views[currentStep].info.title}</h2>
